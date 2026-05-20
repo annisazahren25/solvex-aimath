@@ -9,6 +9,8 @@ import {
 } from "@tanstack/react-router";
 
 import appCss from "../styles.css?url";
+import { AuthProvider } from "@/lib/auth-context";
+import { Toaster } from "@/components/ui/sonner";
 
 function NotFoundComponent() {
   return (
@@ -72,14 +74,16 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Lovable App" },
-      { name: "description", content: "Lovable Generated Project" },
-      { name: "author", content: "Lovable" },
-      { property: "og:title", content: "Lovable App" },
-      { property: "og:description", content: "Lovable Generated Project" },
+      { title: "SolveX — AI Math Companion" },
+      { name: "description", content: "Upload questions, scan equations, and learn step-by-step with AI." },
+      { property: "og:title", content: "SolveX — AI Math Companion" },
+      { property: "og:description", content: "Upload questions, scan equations, and learn step-by-step with AI." },
       { property: "og:type", content: "website" },
-      { name: "twitter:card", content: "summary" },
-      { name: "twitter:site", content: "@Lovable" },
+      { name: "twitter:title", content: "SolveX — AI Math Companion" },
+      { name: "twitter:description", content: "Upload questions, scan equations, and learn step-by-step with AI." },
+      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/f47ddb27-7372-4413-96c7-79252d33c957/id-preview-ca874909--fd4ec49d-649a-468b-9b00-4b07449b0ec7.lovable.app-1779193798345.png" },
+      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/f47ddb27-7372-4413-96c7-79252d33c957/id-preview-ca874909--fd4ec49d-649a-468b-9b00-4b07449b0ec7.lovable.app-1779193798345.png" },
+      { name: "twitter:card", content: "summary_large_image" },
     ],
     links: [
       {
@@ -113,7 +117,10 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <Outlet />
+      <AuthProvider>
+        <Outlet />
+        <Toaster richColors position="top-center" />
+      </AuthProvider>
     </QueryClientProvider>
   );
 }
