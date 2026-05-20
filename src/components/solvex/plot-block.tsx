@@ -361,13 +361,13 @@ export function PlotBlock({ source }: { source: string }) {
     );
   }
 
-  /* ---------- SVG viewport ---------- */
-  const W = 640;
-  const M = { top: 24, right: 28, bottom: 24, left: 28 };
+  /* ---------- SVG viewport (compact) ---------- */
+  const W = 380;
+  const M = { top: 18, right: 22, bottom: 20, left: 22 };
   const innerW = W - M.left - M.right;
-  // Make grid cells square: derive innerH from per-unit pixel size on X.
+  // Square cells: derive innerH from per-unit pixel size on X.
   const unit = innerW / (xmax - xmin);
-  const innerH = unit * (ymax - ymin);
+  const innerH = Math.min(unit * (ymax - ymin), 260);
   const H = innerH + M.top + M.bottom;
 
   const sx = (x: number) => M.left + ((x - xmin) / (xmax - xmin)) * innerW;
