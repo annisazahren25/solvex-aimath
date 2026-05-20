@@ -558,40 +558,8 @@ export function PlotBlock({ source }: { source: string }) {
           />
 
 
-          {/* Minor grid (half-unit) */}
-          <g stroke="#f1f5f9" strokeWidth={0.6}>
-            {xTicks.flatMap((t) => {
-              const half = t + 0.5;
-              if (half >= xmax) return [];
-              const x = sx(half);
-              return [
-                <line
-                  key={`mx-${t}`}
-                  x1={x}
-                  x2={x}
-                  y1={M.top}
-                  y2={M.top + innerH}
-                />,
-              ];
-            })}
-            {yTicks.flatMap((t) => {
-              const half = t + 0.5;
-              if (half >= ymax) return [];
-              const y = sy(half);
-              return [
-                <line
-                  key={`my-${t}`}
-                  x1={M.left}
-                  x2={M.left + innerW}
-                  y1={y}
-                  y2={y}
-                />,
-              ];
-            })}
-          </g>
-
-          {/* Major grid */}
-          <g stroke="#e2e8f0" strokeWidth={1}>
+          {/* Dotted square grid (unit) */}
+          <g stroke="#cbd5e1" strokeWidth={0.7} strokeDasharray="1,3" strokeLinecap="round">
             {xTicks.map((t) => (
               <line
                 key={`gx-${t}`}
