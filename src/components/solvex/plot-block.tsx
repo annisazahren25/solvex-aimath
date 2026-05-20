@@ -277,22 +277,49 @@ function PlotSurface({
 
   /* Auto-detected notable points within view */
   const autoPoints = useMemo(() => {
-    const list: Array<{ x: number; y: number; color: string; kind: string }> = [];
+    const list: Array<{ x: number; y: number; color: string; kind: string; label: string }> = [];
     fns.forEach((f, i) => {
       const c = COLORS[i % COLORS.length];
       for (const r of findRoots(f.fn, xmin, xmax)) {
-        list.push({ x: r, y: 0, color: c, kind: "akar" });
+        list.push({ x: r, y: 0, color: c, kind: "akar", label: `(${fmt(r)}, 0)` });
       }
       if (xmin <= 0 && xmax >= 0) {
         const y0 = f.fn(0);
-        if (Number.isFinite(y0)) list.push({ x: 0, y: y0, color: c, kind: "potong-y" });
+        if (Number.isFinite(y0))
+          list.push({ x: 0, y: y0, color: c, kind: "potong-y", label: `(0, ${fmt(y0)})` });
       }
       for (const e of findExtrema(f.fn, xmin, xmax)) {
-        list.push({ x: e.x, y: e.y, color: c, kind: e.kind === "max" ? "puncak" : "lembah" });
+        list.push({
+          x: e.x,
+          y: e.y,
+          color: c,
+          kind: e.kind === "max" ? "puncak" : "lembah",
+          label: `(${fmt(e.x)}, ${fmt(e.y)})`,
+        });
       }
     });
     return list;
   }, [fns, xmin, xmax]);
+
+  /* Curve end labels (e.g. "y = x² - 9") — pick a sample near the right edge that's visible */
+  const curveLabels = useMemo(() => {
+    return fns.map((f, i) => {
+      // try positions from 92% down to 60% along the visible range
+      for (let frac = 0.92; frac > 0.55; frac -= 0.06) {
+        const x = xmin + xSpan * frac;
+        const y = f.fn(x);
+        if (!Number.isFinite(y)) continue;
+        const py = sy(y);
+        if (py >= M.top + 10 && py <= M.top + innerH - 10) {
+          return { x: sx(x), y: py, label: f.label, color: COLORS[i % COLORS.length] };
+        }
+      }
+      return null;
+    });
+  }, [fns, xmin, xSpan, sx, sy, M.top, innerH]);
+
+  /* ----- Hover crosshair (shows coords on each curve) ----- */
+  const [hoverX, setHoverX] = useState<number | null>(null);
 
   /* ----- Pan + Zoom interactions ----- */
   const pointers = useRef<Map<number, { x: number; y: number }>>(new Map());
