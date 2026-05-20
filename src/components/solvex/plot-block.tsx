@@ -372,21 +372,25 @@ export function PlotBlock({ source }: { source: string }) {
     );
   }
 
-  /* ---------- SVG viewport (compact, square cells) ---------- */
+  /* ---------- SVG viewport (square plot, draggable to resize) ---------- */
   const M = { top: 18, right: 22, bottom: 20, left: 28 };
-  const MAX_INNER_W = 340;
-  const MAX_INNER_H = 240;
-  // Choose a unit (px per 1 unit) so both axes fit within max bounds.
+  const S = size; // square inner side
   const xSpan = xmax - xmin;
   const ySpan = ymax - ymin;
-  const unit = Math.min(MAX_INNER_W / xSpan, MAX_INNER_H / ySpan);
-  const innerW = unit * xSpan;
-  const innerH = unit * ySpan;
+  // unit px per 1 axis-unit; chosen so cells stay square and both axes fit in S
+  const unit = S / Math.max(xSpan, ySpan);
+  const innerW = S;
+  const innerH = S;
+  // content (axis-mapped area) is centered inside square box
+  const contentW = unit * xSpan;
+  const contentH = unit * ySpan;
+  const offX = (S - contentW) / 2;
+  const offY = (S - contentH) / 2;
   const W = innerW + M.left + M.right;
   const H = innerH + M.top + M.bottom;
 
-  const sx = (x: number) => M.left + ((x - xmin) / (xmax - xmin)) * innerW;
-  const sy = (y: number) => M.top + ((ymax - y) / (ymax - ymin)) * innerH;
+  const sx = (x: number) => M.left + offX + ((x - xmin) / xSpan) * contentW;
+  const sy = (y: number) => M.top + offY + ((ymax - y) / ySpan) * contentH;
 
   const xTicks = unitTicks(xmin, xmax);
   const yTicks = unitTicks(ymin, ymax, true);
