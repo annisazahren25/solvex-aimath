@@ -277,22 +277,49 @@ function PlotSurface({
 
   /* Auto-detected notable points within view */
   const autoPoints = useMemo(() => {
-    const list: Array<{ x: number; y: number; color: string; kind: string }> = [];
+    const list: Array<{ x: number; y: number; color: string; kind: string; label: string }> = [];
     fns.forEach((f, i) => {
       const c = COLORS[i % COLORS.length];
       for (const r of findRoots(f.fn, xmin, xmax)) {
-        list.push({ x: r, y: 0, color: c, kind: "akar" });
+        list.push({ x: r, y: 0, color: c, kind: "akar", label: `(${fmt(r)}, 0)` });
       }
       if (xmin <= 0 && xmax >= 0) {
         const y0 = f.fn(0);
-        if (Number.isFinite(y0)) list.push({ x: 0, y: y0, color: c, kind: "potong-y" });
+        if (Number.isFinite(y0))
+          list.push({ x: 0, y: y0, color: c, kind: "potong-y", label: `(0, ${fmt(y0)})` });
       }
       for (const e of findExtrema(f.fn, xmin, xmax)) {
-        list.push({ x: e.x, y: e.y, color: c, kind: e.kind === "max" ? "puncak" : "lembah" });
+        list.push({
+          x: e.x,
+          y: e.y,
+          color: c,
+          kind: e.kind === "max" ? "puncak" : "lembah",
+          label: `(${fmt(e.x)}, ${fmt(e.y)})`,
+        });
       }
     });
     return list;
   }, [fns, xmin, xmax]);
+
+  /* Curve end labels (e.g. "y = x² - 9") — pick a sample near the right edge that's visible */
+  const curveLabels = useMemo(() => {
+    return fns.map((f, i) => {
+      // try positions from 92% down to 60% along the visible range
+      for (let frac = 0.92; frac > 0.55; frac -= 0.06) {
+        const x = xmin + xSpan * frac;
+        const y = f.fn(x);
+        if (!Number.isFinite(y)) continue;
+        const py = sy(y);
+        if (py >= M.top + 10 && py <= M.top + innerH - 10) {
+          return { x: sx(x), y: py, label: f.label, color: COLORS[i % COLORS.length] };
+        }
+      }
+      return null;
+    });
+  }, [fns, xmin, xSpan, sx, sy, M.top, innerH]);
+
+  /* ----- Hover crosshair (shows coords on each curve) ----- */
+  const [hoverX, setHoverX] = useState<number | null>(null);
 
   /* ----- Pan + Zoom interactions ----- */
   const pointers = useRef<Map<number, { x: number; y: number }>>(new Map());
@@ -388,6 +415,17 @@ function PlotSurface({
         ymin: ds.view.ymin + duy,
         ymax: ds.view.ymax + duy,
       });
+      setHoverX(null);
+      return;
+    }
+
+    // Hover: only for fine pointers (mouse)
+    if (e.pointerType === "mouse") {
+      const scaleX = rect.width / W;
+      const px = (e.clientX - rect.left) / scaleX;
+      const dx = invX(px);
+      if (dx >= xmin && dx <= xmax) setHoverX(dx);
+      else setHoverX(null);
     }
   };
 
@@ -395,6 +433,11 @@ function PlotSurface({
     pointers.current.delete(e.pointerId);
     if (pointers.current.size < 2) pinchStart.current = null;
     if (pointers.current.size === 0) dragStart.current = null;
+  };
+
+  const handlePointerLeave = (e: React.PointerEvent<SVGSVGElement>) => {
+    handlePointerUp(e);
+    setHoverX(null);
   };
 
   const handleWheel = (e: React.WheelEvent<SVGSVGElement>) => {
@@ -430,7 +473,7 @@ function PlotSurface({
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerUp}
-        onPointerLeave={handlePointerUp}
+        onPointerLeave={handlePointerLeave}
         onWheel={handleWheel}
         role="img"
         aria-label="Grafik fungsi interaktif"
@@ -502,20 +545,144 @@ function PlotSurface({
           ))}
         </g>
 
-        {/* notable points */}
+        {/* notable points with coordinate labels */}
         <g clipPath="url(#plot-clip)">
-          {autoPoints.map((p, i) => (
-            <g key={i}>
-              <circle cx={sx(p.x)} cy={sy(p.y)} r={4.5} fill="#ffffff" stroke={p.color} strokeWidth={2} />
-            </g>
-          ))}
+          {autoPoints.map((p, i) => {
+            const cx = sx(p.x);
+            const cy = sy(p.y);
+            const above = p.kind === "puncak" || (p.kind === "potong-y" && p.y >= 0);
+            const ty = above ? cy - 10 : cy + 18;
+            return (
+              <g key={i}>
+                <circle cx={cx} cy={cy} r={4.5} fill="#ffffff" stroke={p.color} strokeWidth={2} />
+                <text
+                  x={cx + 8}
+                  y={ty}
+                  fontSize={11}
+                  fontFamily="ui-sans-serif, system-ui"
+                  fill={p.color}
+                  fontWeight={500}
+                  paintOrder="stroke"
+                  stroke="#ffffff"
+                  strokeWidth={3}
+                  strokeLinejoin="round"
+                >
+                  {p.label}
+                </text>
+              </g>
+            );
+          })}
           {manualPoints.map((p, i) => (
             <g key={`m${i}`}>
               <circle cx={sx(p.x)} cy={sy(p.y)} r={4.5} fill="#3B82F6" stroke="#ffffff" strokeWidth={2} />
+              {p.label && (
+                <text
+                  x={sx(p.x) + 8}
+                  y={sy(p.y) - 8}
+                  fontSize={11}
+                  fontFamily="ui-sans-serif, system-ui"
+                  fill="#1E3A8A"
+                  paintOrder="stroke"
+                  stroke="#ffffff"
+                  strokeWidth={3}
+                  strokeLinejoin="round"
+                >
+                  {p.label}
+                </text>
+              )}
             </g>
           ))}
         </g>
+
+        {/* curve end labels */}
+        <g clipPath="url(#plot-clip)">
+          {curveLabels.map((cl, i) =>
+            cl ? (
+              <text
+                key={`cl${i}`}
+                x={cl.x + 6}
+                y={cl.y - 8}
+                fontSize={11.5}
+                fontStyle="italic"
+                fontFamily="ui-sans-serif, system-ui"
+                fill={cl.color}
+                fontWeight={600}
+                paintOrder="stroke"
+                stroke="#ffffff"
+                strokeWidth={3.5}
+                strokeLinejoin="round"
+              >
+                {cl.label}
+              </text>
+            ) : null,
+          )}
+        </g>
+
+        {/* hover crosshair */}
+        {hoverX !== null && (
+          <g clipPath="url(#plot-clip)">
+            <line
+              x1={sx(hoverX)}
+              x2={sx(hoverX)}
+              y1={M.top}
+              y2={M.top + innerH}
+              stroke="#3B82F6"
+              strokeWidth={1}
+              strokeDasharray="3,3"
+              opacity={0.55}
+            />
+            {fns.map((f, i) => {
+              const y = f.fn(hoverX);
+              if (!Number.isFinite(y)) return null;
+              const cy = sy(y);
+              if (cy < M.top || cy > M.top + innerH) return null;
+              return (
+                <circle
+                  key={`hc${i}`}
+                  cx={sx(hoverX)}
+                  cy={cy}
+                  r={4}
+                  fill="#ffffff"
+                  stroke={COLORS[i % COLORS.length]}
+                  strokeWidth={2}
+                />
+              );
+            })}
+          </g>
+        )}
       </svg>
+
+      {/* Hover tooltip (HTML overlay) */}
+      {hoverX !== null && (() => {
+        const leftPct = (sx(hoverX) / W) * 100;
+        const flipX = leftPct > 60;
+        return (
+          <div
+            className="pointer-events-none absolute z-20 min-w-[10rem] rounded-xl border border-slate-200 bg-white/95 px-3 py-2 text-[11.5px] shadow-lg backdrop-blur"
+            style={{
+              left: `calc(${leftPct}% + ${flipX ? "-10px" : "10px"})`,
+              top: 12,
+              transform: flipX ? "translateX(-100%)" : "none",
+            }}
+          >
+            <div className="font-mono font-semibold text-slate-900">x = {fmt(hoverX)}</div>
+            <div className="mt-1 space-y-0.5">
+              {fns.map((f, i) => {
+                const y = f.fn(hoverX);
+                const c = COLORS[i % COLORS.length];
+                return (
+                  <div key={i} className="flex items-center gap-1.5 font-mono">
+                    <span className="h-2 w-2 rounded-full" style={{ background: c }} />
+                    <span style={{ color: c }} className="font-semibold">
+                      ({fmt(hoverX)}, {Number.isFinite(y) ? fmt(y) : "—"})
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Floating controls */}
       <div className="absolute bottom-3 right-3 flex flex-col gap-1.5 rounded-2xl border border-slate-200/80 bg-white/80 p-1.5 shadow-lg shadow-slate-900/5 backdrop-blur-md">
