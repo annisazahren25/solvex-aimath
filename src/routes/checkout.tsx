@@ -11,6 +11,7 @@ import confetti from "canvas-confetti";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Logo } from "@/components/solvex/logo";
+import { AnimatedBackground } from "@/components/solvex/animated-background";
 import { PaymentMethodIcon } from "@/components/solvex/payment-method-icon";
 import { FakeQR } from "@/components/solvex/fake-qr";
 import { useAuth } from "@/lib/auth-context";
@@ -134,8 +135,9 @@ function CheckoutPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-soft">
-      <header className="flex items-center justify-between border-b border-border bg-card/70 px-6 py-4 backdrop-blur">
+    <div className="relative min-h-screen overflow-hidden bg-gradient-soft">
+      <AnimatedBackground variant="soft" />
+      <header className="relative z-10 flex items-center justify-between border-b border-border bg-card/70 px-6 py-4 backdrop-blur">
         <Link to="/"><Logo /></Link>
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <ShieldCheck className="h-4 w-4 text-primary" />
