@@ -415,6 +415,17 @@ function PlotSurface({
         ymin: ds.view.ymin + duy,
         ymax: ds.view.ymax + duy,
       });
+      setHoverX(null);
+      return;
+    }
+
+    // Hover: only for fine pointers (mouse)
+    if (e.pointerType === "mouse") {
+      const scaleX = rect.width / W;
+      const px = (e.clientX - rect.left) / scaleX;
+      const dx = invX(px);
+      if (dx >= xmin && dx <= xmax) setHoverX(dx);
+      else setHoverX(null);
     }
   };
 
@@ -422,6 +433,11 @@ function PlotSurface({
     pointers.current.delete(e.pointerId);
     if (pointers.current.size < 2) pinchStart.current = null;
     if (pointers.current.size === 0) dragStart.current = null;
+  };
+
+  const handlePointerLeave = (e: React.PointerEvent<SVGSVGElement>) => {
+    handlePointerUp(e);
+    setHoverX(null);
   };
 
   const handleWheel = (e: React.WheelEvent<SVGSVGElement>) => {
