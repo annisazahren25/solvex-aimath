@@ -1,0 +1,1 @@
+alter table public.payment_transactions add column if not exists completed_at timestamptz;
