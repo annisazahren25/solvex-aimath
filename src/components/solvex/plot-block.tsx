@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { TrendingUp } from "lucide-react";
 
 /* ---------------------------------------------------------------- */
@@ -203,46 +203,55 @@ const COLORS = [
 /* ---------------------------------------------------------------- */
 
 export function PlotBlock({ source }: { source: string }) {
-  const { xmin, xmax, fns, points: manualPoints } = useMemo(
+  const { xmin: srcXmin, xmax: srcXmax, fns, points: manualPoints } = useMemo(
     () => parsePlot(source),
     [source]
   );
 
-  /* Sample paths and compute y-range */
-  const { paths, ymin, ymax } = useMemo(() => {
-    const N = 800;
-    const samples: Array<Array<{ x: number; y: number | null }>> = fns.map(
-      () => []
-    );
+  /* Compute initial y-range from samples (only when source changes) */
+  const initialView = useMemo(() => {
+    const N = 400;
     let lo = Infinity;
     let hi = -Infinity;
+    for (let i = 0; i <= N; i++) {
+      const x = srcXmin + ((srcXmax - srcXmin) * i) / N;
+      for (const f of fns) {
+        const y = f.fn(x);
+        if (Number.isFinite(y) && Math.abs(y) < 1e6) {
+          if (y < lo) lo = y;
+          if (y > hi) hi = y;
+        }
+      }
+    }
+    if (!Number.isFinite(lo) || !Number.isFinite(hi)) { lo = -10; hi = 10; }
+    if (lo === hi) { lo -= 1; hi += 1; }
+    const pad = (hi - lo) * 0.15;
+    return {
+      xmin: srcXmin,
+      xmax: srcXmax,
+      ymin: Math.floor(lo - pad),
+      ymax: Math.ceil(hi + pad),
+    };
+  }, [srcXmin, srcXmax, fns]);
+
+  /* Interactive view (pannable) */
+  const [view, setView] = useState(initialView);
+  useEffect(() => { setView(initialView); }, [initialView]);
+  const { xmin, xmax, ymin, ymax } = view;
+
+  /* Sample paths over current view */
+  const paths = useMemo(() => {
+    const N = 600;
+    const samples: Array<Array<{ x: number; y: number | null }>> = fns.map(() => []);
     for (let i = 0; i <= N; i++) {
       const x = xmin + ((xmax - xmin) * i) / N;
       fns.forEach((f, fi) => {
         const y = f.fn(x);
-        if (Number.isFinite(y) && Math.abs(y) < 1e6) {
-          samples[fi].push({ x, y });
-          if (y < lo) lo = y;
-          if (y > hi) hi = y;
-        } else {
-          samples[fi].push({ x, y: null });
-        }
+        if (Number.isFinite(y) && Math.abs(y) < 1e6) samples[fi].push({ x, y });
+        else samples[fi].push({ x, y: null });
       });
     }
-    if (!Number.isFinite(lo) || !Number.isFinite(hi)) {
-      lo = -10;
-      hi = 10;
-    }
-    if (lo === hi) {
-      lo -= 1;
-      hi += 1;
-    }
-    const pad = (hi - lo) * 0.12;
-    return {
-      paths: samples,
-      ymin: Math.floor(lo - pad),
-      ymax: Math.ceil(hi + pad),
-    };
+    return samples;
   }, [xmin, xmax, fns]);
 
   /* Notable points: roots, y-intercepts, intersections, manual */
@@ -334,6 +343,13 @@ export function PlotBlock({ source }: { source: string }) {
 
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
   const [hoverX, setHoverX] = useState<number | null>(null);
+  const dragRef = useRef<{
+    active: boolean;
+    startX: number;
+    startY: number;
+    view: { xmin: number; xmax: number; ymin: number; ymax: number };
+  }>({ active: false, startX: 0, startY: 0, view: initialView });
+
 
   const KIND_LABEL: Record<string, string> = {
     "akar": "Akar / titik potong sumbu x",
@@ -352,13 +368,13 @@ export function PlotBlock({ source }: { source: string }) {
     );
   }
 
-  /* ---------- SVG viewport ---------- */
-  const W = 640;
-  const M = { top: 24, right: 28, bottom: 24, left: 28 };
+  /* ---------- SVG viewport (compact) ---------- */
+  const W = 380;
+  const M = { top: 18, right: 22, bottom: 20, left: 22 };
   const innerW = W - M.left - M.right;
-  // Make grid cells square: derive innerH from per-unit pixel size on X.
+  // Square cells: derive innerH from per-unit pixel size on X.
   const unit = innerW / (xmax - xmin);
-  const innerH = unit * (ymax - ymin);
+  const innerH = Math.min(unit * (ymax - ymin), 260);
   const H = innerH + M.top + M.bottom;
 
   const sx = (x: number) => M.left + ((x - xmin) / (xmax - xmin)) * innerW;
@@ -413,7 +429,7 @@ export function PlotBlock({ source }: { source: string }) {
   });
 
   return (
-    <div className="not-prose my-4 overflow-hidden rounded-3xl border border-border/60 bg-gradient-to-br from-card via-card to-accent/30 shadow-soft ring-1 ring-black/[0.02]">
+    <div className="not-prose my-4 inline-block max-w-full overflow-hidden rounded-2xl border border-border/60 bg-gradient-to-br from-card via-card to-accent/30 shadow-soft ring-1 ring-black/[0.02]" style={{ width: 420 }}>
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 bg-gradient-to-r from-primary/8 via-primary/5 to-transparent px-4 py-3">
         <div className="flex items-center gap-2">
@@ -424,8 +440,17 @@ export function PlotBlock({ source }: { source: string }) {
             Grafik Fungsi
           </div>
         </div>
-        <div className="rounded-full border border-border/60 bg-background/80 px-2.5 py-0.5 font-mono text-[11px] text-muted-foreground">
-          x ∈ [{xmin}, {xmax}] · y ∈ [{ymin}, {ymax}]
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => setView(initialView)}
+            className="rounded-full border border-border/60 bg-background/80 px-2 py-0.5 font-mono text-[10.5px] text-muted-foreground transition hover:bg-background hover:text-foreground"
+          >
+            reset
+          </button>
+          <div className="rounded-full border border-border/60 bg-background/80 px-2 py-0.5 font-mono text-[10.5px] text-muted-foreground">
+            x∈[{fmt(xmin)},{fmt(xmax)}]
+          </div>
         </div>
       </div>
 
@@ -492,23 +517,46 @@ export function PlotBlock({ source }: { source: string }) {
             rx={10}
           />
 
-          {/* Mouse capture for crosshair (rendered above background, below points) */}
+          {/* Mouse capture for crosshair + drag-to-pan */}
           <rect
             x={M.left}
             y={M.top}
             width={innerW}
             height={innerH}
             fill="transparent"
-            style={{ cursor: "crosshair" }}
+            style={{ cursor: dragRef.current.active ? "grabbing" : "crosshair" }}
+            onMouseDown={(e) => {
+              dragRef.current = {
+                active: true,
+                startX: e.clientX,
+                startY: e.clientY,
+                view: { xmin, xmax, ymin, ymax },
+              };
+              setHoverX(null);
+            }}
             onMouseMove={(e) => {
               const svg = (e.currentTarget.ownerSVGElement ?? e.currentTarget) as SVGSVGElement;
               const rect = svg.getBoundingClientRect();
+              if (dragRef.current.active) {
+                const pxPerUnitX = (rect.width / W) * (innerW / (dragRef.current.view.xmax - dragRef.current.view.xmin));
+                const pxPerUnitY = (rect.height / H) * (innerH / (dragRef.current.view.ymax - dragRef.current.view.ymin));
+                const dx = (e.clientX - dragRef.current.startX) / pxPerUnitX;
+                const dy = (e.clientY - dragRef.current.startY) / pxPerUnitY;
+                const v = dragRef.current.view;
+                setView({
+                  xmin: v.xmin - dx, xmax: v.xmax - dx,
+                  ymin: v.ymin + dy, ymax: v.ymax + dy,
+                });
+                return;
+              }
               const vbX = ((e.clientX - rect.left) / rect.width) * W;
               const dx = xmin + ((vbX - M.left) / innerW) * (xmax - xmin);
               if (dx >= xmin && dx <= xmax) setHoverX(dx);
             }}
-            onMouseLeave={() => setHoverX(null)}
+            onMouseUp={() => { dragRef.current.active = false; }}
+            onMouseLeave={() => { dragRef.current.active = false; setHoverX(null); }}
           />
+
 
           {/* Minor grid (half-unit) */}
           <g stroke="#f1f5f9" strokeWidth={0.6}>
