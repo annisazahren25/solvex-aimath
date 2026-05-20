@@ -370,7 +370,7 @@ export function PlotBlock({ source }: { source: string }) {
 
   /* ---------- SVG viewport (square plot, draggable to resize) ---------- */
   const M = { top: 18, right: 22, bottom: 20, left: 28 };
-  const S = size; // square inner side
+  const S = 300; // fixed square plot size (ChatGPT-style)
   const xSpan = xmax - xmin;
   const ySpan = ymax - ymin;
   // unit px per 1 axis-unit; chosen so cells stay square and both axes fit in S
