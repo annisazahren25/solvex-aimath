@@ -368,13 +368,17 @@ export function PlotBlock({ source }: { source: string }) {
     );
   }
 
-  /* ---------- SVG viewport (compact) ---------- */
-  const W = 380;
-  const M = { top: 18, right: 22, bottom: 20, left: 22 };
-  const innerW = W - M.left - M.right;
-  // Square cells: derive innerH from per-unit pixel size on X.
-  const unit = innerW / (xmax - xmin);
-  const innerH = unit * (ymax - ymin);
+  /* ---------- SVG viewport (compact, square cells) ---------- */
+  const M = { top: 18, right: 22, bottom: 20, left: 28 };
+  const MAX_INNER_W = 340;
+  const MAX_INNER_H = 240;
+  // Choose a unit (px per 1 unit) so both axes fit within max bounds.
+  const xSpan = xmax - xmin;
+  const ySpan = ymax - ymin;
+  const unit = Math.min(MAX_INNER_W / xSpan, MAX_INNER_H / ySpan);
+  const innerW = unit * xSpan;
+  const innerH = unit * ySpan;
+  const W = innerW + M.left + M.right;
   const H = innerH + M.top + M.bottom;
 
   const sx = (x: number) => M.left + ((x - xmin) / (xmax - xmin)) * innerW;
@@ -429,7 +433,7 @@ export function PlotBlock({ source }: { source: string }) {
   });
 
   return (
-    <div className="not-prose my-4 inline-block max-w-full overflow-hidden rounded-2xl border border-border/60 bg-gradient-to-br from-card via-card to-accent/30 shadow-soft ring-1 ring-black/[0.02]" style={{ width: 420 }}>
+    <div className="not-prose my-4 inline-block max-w-full overflow-hidden rounded-2xl border border-border/60 bg-gradient-to-br from-card via-card to-accent/30 shadow-soft ring-1 ring-black/[0.02]" style={{ width: Math.min(W + 24, 420) }}>
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 bg-gradient-to-r from-primary/8 via-primary/5 to-transparent px-4 py-3">
         <div className="flex items-center gap-2">
