@@ -486,7 +486,9 @@ export function PlotBlock({ source }: { source: string }) {
       <div className="relative p-3" style={{ width: W + 24 }}>
         <svg
           viewBox={`0 0 ${W} ${H}`}
-          className="block h-auto w-full select-none"
+          width={W}
+          height={H}
+          className="block select-none"
           preserveAspectRatio="xMidYMid meet"
           role="img"
           aria-label="Grafik fungsi"
