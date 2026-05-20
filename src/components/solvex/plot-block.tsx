@@ -343,16 +343,12 @@ export function PlotBlock({ source }: { source: string }) {
 
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
   const [hoverX, setHoverX] = useState<number | null>(null);
-  const [size, setSize] = useState(260); // square inner side (px)
   const dragRef = useRef<{
     active: boolean;
     startX: number;
     startY: number;
     view: { xmin: number; xmax: number; ymin: number; ymax: number };
   }>({ active: false, startX: 0, startY: 0, view: initialView });
-  const resizeRef = useRef<{ active: boolean; startX: number; startY: number; start: number }>({
-    active: false, startX: 0, startY: 0, start: 260,
-  });
 
 
   const KIND_LABEL: Record<string, string> = {
@@ -374,7 +370,7 @@ export function PlotBlock({ source }: { source: string }) {
 
   /* ---------- SVG viewport (square plot, draggable to resize) ---------- */
   const M = { top: 18, right: 22, bottom: 20, left: 28 };
-  const S = size; // square inner side
+  const S = 300; // fixed square plot size (ChatGPT-style)
   const xSpan = xmax - xmin;
   const ySpan = ymax - ymin;
   // unit px per 1 axis-unit; chosen so cells stay square and both axes fit in S
@@ -928,35 +924,7 @@ export function PlotBlock({ source }: { source: string }) {
                   {p.fnLabel}
                 </div>
               )}
-        {/* Resize handle (drag to change plot size) */}
-        <div
-          role="slider"
-          aria-label="Ubah ukuran grafik"
-          onMouseDown={(e) => {
-            e.preventDefault();
-            resizeRef.current = { active: true, startX: e.clientX, startY: e.clientY, start: size };
-            const onMove = (ev: MouseEvent) => {
-              if (!resizeRef.current.active) return;
-              const d = Math.max(ev.clientX - resizeRef.current.startX, ev.clientY - resizeRef.current.startY);
-              setSize(Math.max(180, Math.min(420, resizeRef.current.start + d)));
-            };
-            const onUp = () => {
-              resizeRef.current.active = false;
-              window.removeEventListener("mousemove", onMove);
-              window.removeEventListener("mouseup", onUp);
-            };
-            window.addEventListener("mousemove", onMove);
-            window.addEventListener("mouseup", onUp);
-          }}
-          className="absolute bottom-1 right-1 grid h-5 w-5 cursor-nwse-resize place-items-center rounded-md bg-background/80 text-muted-foreground shadow-sm ring-1 ring-border/60 hover:text-foreground"
-          title="Drag untuk mengubah ukuran"
-        >
-          <svg viewBox="0 0 10 10" className="h-3 w-3" fill="currentColor">
-            <path d="M9 1v8H1L9 1z" opacity="0.25" />
-            <path d="M7 9h2V7L7 9zM4 9h2V7H4v2zM7 6h2V4L7 6z" />
-          </svg>
-        </div>
-      </div>
+            </div>
           );
         })()}
       </div>
