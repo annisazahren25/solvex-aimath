@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { TrendingUp } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Maximize2, Minus, Plus, RotateCcw, TrendingUp, X } from "lucide-react";
 
 /* ---------------------------------------------------------------- */
 /* Expression compiler                                               */
@@ -29,7 +29,7 @@ function compileExpr(src: string): (x: number) => number {
   // eslint-disable-next-line no-new-func
   return new Function(
     "x",
-    `try { const v = (${s}); return typeof v === "number" ? v : NaN; } catch (e) { return NaN; }`
+    `try { const v = (${s}); return typeof v === "number" ? v : NaN; } catch (e) { return NaN; }`,
   ) as (x: number) => number;
 }
 
@@ -38,7 +38,7 @@ function compileExpr(src: string): (x: number) => number {
 /* ---------------------------------------------------------------- */
 
 type ParsedFn = { label: string; raw: string; fn: (x: number) => number };
-type ManualPoint = { x: number; y: number; label?: string; color?: string };
+type ManualPoint = { x: number; y: number; label?: string };
 type Parsed = {
   xmin: number;
   xmax: number;
@@ -63,14 +63,9 @@ function parsePlot(src: string): Parsed {
       continue;
     }
 
-    // point: (x, y) "label"
     const pt = line.match(/^point\s*[:=]?\s*\(\s*(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)\s*\)\s*(?:"([^"]*)")?/i);
     if (pt) {
-      points.push({
-        x: parseFloat(pt[1]),
-        y: parseFloat(pt[2]),
-        label: pt[3],
-      });
+      points.push({ x: parseFloat(pt[1]), y: parseFloat(pt[2]), label: pt[3] });
       continue;
     }
 
@@ -93,52 +88,52 @@ function parsePlot(src: string): Parsed {
 }
 
 /* ---------------------------------------------------------------- */
-/* Helpers                                                           */
+/* Math helpers                                                      */
 /* ---------------------------------------------------------------- */
 
-function unitTicks(min: number, max: number, forceUnit = false): number[] {
-  const span = max - min;
-  let step = 1;
-  if (!forceUnit) {
-    if (span > 60) step = Math.ceil(span / 40);
-    else if (span > 30) step = 2;
-  }
-  const start = Math.ceil(min / step) * step;
+function niceStep(span: number, targetTicks = 10): number {
+  const raw = span / targetTicks;
+  const mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  const norm = raw / mag;
+  let nice: number;
+  if (norm < 1.5) nice = 1;
+  else if (norm < 3) nice = 2;
+  else if (norm < 7) nice = 5;
+  else nice = 10;
+  return nice * mag;
+}
+
+function gridTicks(min: number, max: number, step: number): number[] {
   const out: number[] = [];
-  for (let v = start; v <= max + 1e-9; v += step) {
-    out.push(Number(v.toFixed(6)));
+  const start = Math.ceil(min / step) * step;
+  for (let v = start; v <= max + step * 0.001; v += step) {
+    out.push(Number(v.toFixed(10)));
   }
   return out;
 }
 
 function findRoots(f: (x: number) => number, xmin: number, xmax: number): number[] {
-  const N = 400;
+  const N = 500;
   const dx = (xmax - xmin) / N;
   const roots: number[] = [];
   let prev = f(xmin);
   for (let i = 1; i <= N; i++) {
     const x = xmin + i * dx;
     const cur = f(x);
-    if (
-      Number.isFinite(prev) &&
-      Number.isFinite(cur) &&
-      prev * cur < 0
-    ) {
-      // bisection refine
+    if (Number.isFinite(prev) && Number.isFinite(cur) && prev * cur < 0) {
       let lo = x - dx;
       let hi = x;
       let flo = prev;
-      for (let k = 0; k < 50; k++) {
+      for (let k = 0; k < 60; k++) {
         const mid = (lo + hi) / 2;
         const fm = f(mid);
         if (!Number.isFinite(fm)) break;
-        if (flo * fm < 0) {
-          hi = mid;
-        } else {
+        if (flo * fm < 0) hi = mid;
+        else {
           lo = mid;
           flo = fm;
         }
-        if (Math.abs(hi - lo) < 1e-7) break;
+        if (Math.abs(hi - lo) < 1e-8) break;
       }
       const root = (lo + hi) / 2;
       if (!roots.some((r) => Math.abs(r - root) < 1e-4)) roots.push(root);
@@ -148,31 +143,14 @@ function findRoots(f: (x: number) => number, xmin: number, xmax: number): number
   return roots;
 }
 
-function findIntersections(
-  f: (x: number) => number,
-  g: (x: number) => number,
-  xmin: number,
-  xmax: number
-): Array<{ x: number; y: number }> {
-  const diff = (x: number) => f(x) - g(x);
-  const roots = findRoots(diff, xmin, xmax);
-  return roots.map((x) => ({ x, y: f(x) }));
-}
-
-/** Find local extrema (min/max) by scanning sign changes of numerical derivative. */
-function findExtrema(
-  f: (x: number) => number,
-  xmin: number,
-  xmax: number
-): Array<{ x: number; y: number; kind: "min" | "max" }> {
-  const h = (xmax - xmin) / 4000;
+function findExtrema(f: (x: number) => number, xmin: number, xmax: number) {
+  const h = (xmax - xmin) / 5000;
   const df = (x: number) => (f(x + h) - f(x - h)) / (2 * h);
   const roots = findRoots(df, xmin + h, xmax - h);
   const out: Array<{ x: number; y: number; kind: "min" | "max" }> = [];
   for (const r of roots) {
     const y = f(r);
     if (!Number.isFinite(y)) continue;
-    // second derivative test
     const d2 = (f(r + h) - 2 * f(r) + f(r - h)) / (h * h);
     if (!Number.isFinite(d2) || Math.abs(d2) < 1e-6) continue;
     out.push({ x: r, y, kind: d2 > 0 ? "min" : "max" });
@@ -181,8 +159,10 @@ function findExtrema(
 }
 
 function fmt(n: number): string {
+  if (!Number.isFinite(n)) return "—";
   if (Math.abs(n) < 1e-6) return "0";
   if (Math.abs(n - Math.round(n)) < 1e-3) return String(Math.round(n));
+  if (Math.abs(n) >= 1000) return n.toFixed(0);
   return n.toFixed(2).replace(/\.?0+$/, "");
 }
 
@@ -191,25 +171,393 @@ function fmt(n: number): string {
 /* ---------------------------------------------------------------- */
 
 const COLORS = [
-  { stroke: "#2563eb", glow: "#3b82f6", soft: "#dbeafe" }, // blue
-  { stroke: "#dc2626", glow: "#ef4444", soft: "#fee2e2" }, // red
-  { stroke: "#059669", glow: "#10b981", soft: "#d1fae5" }, // emerald
-  { stroke: "#d97706", glow: "#f59e0b", soft: "#fef3c7" }, // amber
-  { stroke: "#7c3aed", glow: "#8b5cf6", soft: "#ede9fe" }, // violet
+  "#3B82F6", // primary blue
+  "#EF4444", // red
+  "#10B981", // emerald
+  "#F59E0B", // amber
+  "#8B5CF6", // violet
 ];
 
 /* ---------------------------------------------------------------- */
-/* Component                                                         */
+/* Inner Plot Surface (the real interactive canvas)                 */
+/* ---------------------------------------------------------------- */
+
+type View = { xmin: number; xmax: number; ymin: number; ymax: number };
+
+function PlotSurface({
+  fns,
+  manualPoints,
+  view,
+  setView,
+  initialView,
+  height,
+}: {
+  fns: ParsedFn[];
+  manualPoints: ManualPoint[];
+  view: View;
+  setView: (v: View | ((prev: View) => View)) => void;
+  initialView: View;
+  height: number;
+}) {
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const [size, setSize] = useState({ w: 600, h: height });
+
+  // Observe container width
+  useEffect(() => {
+    if (!wrapperRef.current) return;
+    const el = wrapperRef.current;
+    const ro = new ResizeObserver(() => {
+      const rect = el.getBoundingClientRect();
+      setSize({ w: Math.max(280, rect.width), h: height });
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [height]);
+
+  const W = size.w;
+  const H = size.h;
+  const M = { top: 16, right: 16, bottom: 28, left: 38 };
+  const innerW = Math.max(50, W - M.left - M.right);
+  const innerH = Math.max(50, H - M.top - M.bottom);
+
+  const { xmin, xmax, ymin, ymax } = view;
+  const xSpan = xmax - xmin;
+  const ySpan = ymax - ymin;
+
+  const sx = useCallback((x: number) => M.left + ((x - xmin) / xSpan) * innerW, [M.left, innerW, xmin, xSpan]);
+  const sy = useCallback((y: number) => M.top + ((ymax - y) / ySpan) * innerH, [M.top, innerH, ymax, ySpan]);
+  const invX = (px: number) => xmin + ((px - M.left) / innerW) * xSpan;
+  const invY = (py: number) => ymax - ((py - M.top) / innerH) * ySpan;
+
+  /* Tick steps */
+  const xStep = niceStep(xSpan, Math.max(6, Math.floor(innerW / 80)));
+  const yStep = niceStep(ySpan, Math.max(5, Math.floor(innerH / 60)));
+  const xMinor = xStep / 5;
+  const yMinor = yStep / 5;
+
+  const xTicks = useMemo(() => gridTicks(xmin, xmax, xStep), [xmin, xmax, xStep]);
+  const yTicks = useMemo(() => gridTicks(ymin, ymax, yStep), [ymin, ymax, yStep]);
+  const xTicksMinor = useMemo(() => gridTicks(xmin, xmax, xMinor), [xmin, xmax, xMinor]);
+  const yTicksMinor = useMemo(() => gridTicks(ymin, ymax, yMinor), [ymin, ymax, yMinor]);
+
+  /* Sample curves over current view, generating SVG path strings */
+  const curvePaths = useMemo(() => {
+    const N = Math.min(1200, Math.max(400, Math.floor(innerW * 1.5)));
+    return fns.map((f) => {
+      let d = "";
+      let pen = false;
+      let prevY: number | null = null;
+      for (let i = 0; i <= N; i++) {
+        const x = xmin + (xSpan * i) / N;
+        const y = f.fn(x);
+        if (!Number.isFinite(y) || Math.abs(y) > 1e8) {
+          pen = false;
+          prevY = null;
+          continue;
+        }
+        // break path on huge jumps (asymptotes)
+        if (prevY !== null && Math.abs(y - prevY) > ySpan * 4) {
+          pen = false;
+        }
+        const px = sx(x);
+        const py = sy(y);
+        // soft clip far outside vertical
+        if (py < M.top - 200 || py > M.top + innerH + 200) {
+          pen = false;
+          prevY = y;
+          continue;
+        }
+        d += `${pen ? "L" : "M"}${px.toFixed(2)},${py.toFixed(2)}`;
+        pen = true;
+        prevY = y;
+      }
+      return d;
+    });
+  }, [fns, xmin, xSpan, ySpan, sx, sy, innerW, M.top, innerH]);
+
+  /* Auto-detected notable points within view */
+  const autoPoints = useMemo(() => {
+    const list: Array<{ x: number; y: number; color: string; kind: string }> = [];
+    fns.forEach((f, i) => {
+      const c = COLORS[i % COLORS.length];
+      for (const r of findRoots(f.fn, xmin, xmax)) {
+        list.push({ x: r, y: 0, color: c, kind: "akar" });
+      }
+      if (xmin <= 0 && xmax >= 0) {
+        const y0 = f.fn(0);
+        if (Number.isFinite(y0)) list.push({ x: 0, y: y0, color: c, kind: "potong-y" });
+      }
+      for (const e of findExtrema(f.fn, xmin, xmax)) {
+        list.push({ x: e.x, y: e.y, color: c, kind: e.kind === "max" ? "puncak" : "lembah" });
+      }
+    });
+    return list;
+  }, [fns, xmin, xmax]);
+
+  /* ----- Pan + Zoom interactions ----- */
+  const pointers = useRef<Map<number, { x: number; y: number }>>(new Map());
+  const dragStart = useRef<{ x: number; y: number; view: View } | null>(null);
+  const pinchStart = useRef<{ dist: number; mid: { x: number; y: number }; view: View } | null>(null);
+
+  const zoomAt = useCallback(
+    (factor: number, cx?: number, cy?: number) => {
+      setView((v) => {
+        const xs = v.xmax - v.xmin;
+        const ys = v.ymax - v.ymin;
+        const ax = cx ?? (v.xmin + v.xmax) / 2;
+        const ay = cy ?? (v.ymin + v.ymax) / 2;
+        const nxs = xs * factor;
+        const nys = ys * factor;
+        // clamp zoom
+        if (nxs < 1e-4 || nxs > 1e7) return v;
+        return {
+          xmin: ax - (ax - v.xmin) * factor,
+          xmax: ax + (v.xmax - ax) * factor,
+          ymin: ay - (ay - v.ymin) * factor,
+          ymax: ay + (v.ymax - ay) * factor,
+        };
+      });
+    },
+    [setView],
+  );
+
+  const handlePointerDown = (e: React.PointerEvent<SVGSVGElement>) => {
+    (e.target as Element).setPointerCapture?.(e.pointerId);
+    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pointers.current.size === 1) {
+      dragStart.current = { x: e.clientX, y: e.clientY, view: { ...view } };
+    } else if (pointers.current.size === 2) {
+      const pts = Array.from(pointers.current.values());
+      const dx = pts[0].x - pts[1].x;
+      const dy = pts[0].y - pts[1].y;
+      pinchStart.current = {
+        dist: Math.hypot(dx, dy),
+        mid: { x: (pts[0].x + pts[1].x) / 2, y: (pts[0].y + pts[1].y) / 2 },
+        view: { ...view },
+      };
+      dragStart.current = null;
+    }
+  };
+
+  const handlePointerMove = (e: React.PointerEvent<SVGSVGElement>) => {
+    if (!pointers.current.has(e.pointerId)) return;
+    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    const svg = e.currentTarget;
+    const rect = svg.getBoundingClientRect();
+
+    if (pointers.current.size === 2 && pinchStart.current) {
+      const pts = Array.from(pointers.current.values());
+      const dx = pts[0].x - pts[1].x;
+      const dy = pts[0].y - pts[1].y;
+      const dist = Math.hypot(dx, dy);
+      const factor = pinchStart.current.dist / dist;
+      const v0 = pinchStart.current.view;
+      const cxClient = pinchStart.current.mid.x - rect.left;
+      const cyClient = pinchStart.current.mid.y - rect.top;
+      // map client px to data using ORIGINAL view
+      const ratioX = cxClient / rect.width;
+      const ratioY = cyClient / rect.height;
+      const px = M.left + ratioX * innerW * (W / rect.width === 0 ? 1 : 1); // unused
+      // simpler: compute data coord with v0
+      const ax = v0.xmin + ((cxClient - M.left * (rect.width / W)) / (innerW * (rect.width / W))) * (v0.xmax - v0.xmin);
+      const ay = v0.ymax - ((cyClient - M.top * (rect.height / H)) / (innerH * (rect.height / H))) * (v0.ymax - v0.ymin);
+      const nxs = (v0.xmax - v0.xmin) * factor;
+      if (nxs < 1e-4 || nxs > 1e7) return;
+      setView({
+        xmin: ax - (ax - v0.xmin) * factor,
+        xmax: ax + (v0.xmax - ax) * factor,
+        ymin: ay - (ay - v0.ymin) * factor,
+        ymax: ay + (v0.ymax - ay) * factor,
+      });
+      void px;
+      void ratioY;
+      return;
+    }
+
+    if (dragStart.current) {
+      const ds = dragStart.current;
+      const scaleX = rect.width / W;
+      const scaleY = rect.height / H;
+      const dxPx = (e.clientX - ds.x) / scaleX;
+      const dyPx = (e.clientY - ds.y) / scaleY;
+      const dux = (dxPx / innerW) * (ds.view.xmax - ds.view.xmin);
+      const duy = (dyPx / innerH) * (ds.view.ymax - ds.view.ymin);
+      setView({
+        xmin: ds.view.xmin - dux,
+        xmax: ds.view.xmax - dux,
+        ymin: ds.view.ymin + duy,
+        ymax: ds.view.ymax + duy,
+      });
+    }
+  };
+
+  const handlePointerUp = (e: React.PointerEvent<SVGSVGElement>) => {
+    pointers.current.delete(e.pointerId);
+    if (pointers.current.size < 2) pinchStart.current = null;
+    if (pointers.current.size === 0) dragStart.current = null;
+  };
+
+  const handleWheel = (e: React.WheelEvent<SVGSVGElement>) => {
+    e.preventDefault();
+    const rect = e.currentTarget.getBoundingClientRect();
+    const cxPx = e.clientX - rect.left;
+    const cyPx = e.clientY - rect.top;
+    const scaleX = rect.width / W;
+    const scaleY = rect.height / H;
+    const cx = invX(cxPx / scaleX);
+    const cy = invY(cyPx / scaleY);
+    const factor = e.deltaY > 0 ? 1.12 : 1 / 1.12;
+    zoomAt(factor, cx, cy);
+  };
+
+  // axis line positions (clamped)
+  const axisY = sy(Math.min(Math.max(0, ymin), ymax));
+  const axisX = sx(Math.min(Math.max(0, xmin), xmax));
+  const showXAxis = ymin <= 0 && ymax >= 0;
+  const showYAxis = xmin <= 0 && xmax >= 0;
+
+  return (
+    <div ref={wrapperRef} className="relative w-full" style={{ height: H }}>
+      <svg
+        viewBox={`0 0 ${W} ${H}`}
+        width="100%"
+        height={H}
+        className="block touch-none select-none rounded-2xl bg-white"
+        style={{ cursor: dragStart.current ? "grabbing" : "grab" }}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={handlePointerUp}
+        onPointerLeave={handlePointerUp}
+        onWheel={handleWheel}
+        role="img"
+        aria-label="Grafik fungsi interaktif"
+      >
+        {/* outer frame */}
+        <rect x={0.5} y={0.5} width={W - 1} height={H - 1} rx={16} fill="#ffffff" stroke="#EEF2F7" />
+
+        {/* minor grid */}
+        <g stroke="#F1F5F9" strokeWidth={1}>
+          {xTicksMinor.map((t) => (
+            <line key={`mx${t}`} x1={sx(t)} x2={sx(t)} y1={M.top} y2={M.top + innerH} />
+          ))}
+          {yTicksMinor.map((t) => (
+            <line key={`my${t}`} x1={M.left} x2={M.left + innerW} y1={sy(t)} y2={sy(t)} />
+          ))}
+        </g>
+
+        {/* major grid */}
+        <g stroke="#E2E8F0" strokeWidth={1}>
+          {xTicks.map((t) => (
+            <line key={`gx${t}`} x1={sx(t)} x2={sx(t)} y1={M.top} y2={M.top + innerH} />
+          ))}
+          {yTicks.map((t) => (
+            <line key={`gy${t}`} x1={M.left} x2={M.left + innerW} y1={sy(t)} y2={sy(t)} />
+          ))}
+        </g>
+
+        {/* axes */}
+        <g stroke="#94A3B8" strokeWidth={1.4}>
+          {showXAxis && <line x1={M.left} x2={M.left + innerW} y1={axisY} y2={axisY} />}
+          {showYAxis && <line x1={axisX} x2={axisX} y1={M.top} y2={M.top + innerH} />}
+        </g>
+
+        {/* tick labels */}
+        <g fontSize={11} fill="#64748B" fontFamily="ui-sans-serif, system-ui">
+          {xTicks.map((t) => {
+            if (Math.abs(t) < 1e-9 && showYAxis) return null;
+            return (
+              <text key={`tx${t}`} x={sx(t)} y={M.top + innerH + 14} textAnchor="middle">
+                {fmt(t)}
+              </text>
+            );
+          })}
+          {yTicks.map((t) => {
+            if (Math.abs(t) < 1e-9 && showXAxis) return null;
+            return (
+              <text key={`ty${t}`} x={M.left - 6} y={sy(t) + 4} textAnchor="end">
+                {fmt(t)}
+              </text>
+            );
+          })}
+        </g>
+
+        {/* clip for curves */}
+        <clipPath id="plot-clip">
+          <rect x={M.left} y={M.top} width={innerW} height={innerH} rx={8} />
+        </clipPath>
+
+        {/* curves */}
+        <g clipPath="url(#plot-clip)" fill="none" strokeLinecap="round" strokeLinejoin="round">
+          {fns.map((_, i) => (
+            <path
+              key={i}
+              d={curvePaths[i]}
+              stroke={COLORS[i % COLORS.length]}
+              strokeWidth={2.4}
+              opacity={0.95}
+            />
+          ))}
+        </g>
+
+        {/* notable points */}
+        <g clipPath="url(#plot-clip)">
+          {autoPoints.map((p, i) => (
+            <g key={i}>
+              <circle cx={sx(p.x)} cy={sy(p.y)} r={4.5} fill="#ffffff" stroke={p.color} strokeWidth={2} />
+            </g>
+          ))}
+          {manualPoints.map((p, i) => (
+            <g key={`m${i}`}>
+              <circle cx={sx(p.x)} cy={sy(p.y)} r={4.5} fill="#3B82F6" stroke="#ffffff" strokeWidth={2} />
+            </g>
+          ))}
+        </g>
+      </svg>
+
+      {/* Floating controls */}
+      <div className="absolute bottom-3 right-3 flex flex-col gap-1.5 rounded-2xl border border-slate-200/80 bg-white/80 p-1.5 shadow-lg shadow-slate-900/5 backdrop-blur-md">
+        <button
+          type="button"
+          onClick={() => zoomAt(1 / 1.25)}
+          className="grid h-8 w-8 place-items-center rounded-xl text-slate-600 transition hover:bg-blue-50 hover:text-blue-600 active:scale-95"
+          aria-label="Zoom in"
+        >
+          <Plus className="h-4 w-4" />
+        </button>
+        <button
+          type="button"
+          onClick={() => zoomAt(1.25)}
+          className="grid h-8 w-8 place-items-center rounded-xl text-slate-600 transition hover:bg-blue-50 hover:text-blue-600 active:scale-95"
+          aria-label="Zoom out"
+        >
+          <Minus className="h-4 w-4" />
+        </button>
+        <div className="mx-1.5 h-px bg-slate-200" />
+        <button
+          type="button"
+          onClick={() => setView(initialView)}
+          className="grid h-8 w-8 place-items-center rounded-xl text-slate-600 transition hover:bg-blue-50 hover:text-blue-600 active:scale-95"
+          aria-label="Reset"
+        >
+          <RotateCcw className="h-4 w-4" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------- */
+/* Public component                                                  */
 /* ---------------------------------------------------------------- */
 
 export function PlotBlock({ source }: { source: string }) {
   const { xmin: srcXmin, xmax: srcXmax, fns, points: manualPoints } = useMemo(
     () => parsePlot(source),
-    [source]
+    [source],
   );
 
-  /* Compute initial y-range from samples (only when source changes) */
-  const initialView = useMemo(() => {
+  const initialView = useMemo<View>(() => {
     const N = 400;
     let lo = Infinity;
     let hi = -Infinity;
@@ -223,9 +571,15 @@ export function PlotBlock({ source }: { source: string }) {
         }
       }
     }
-    if (!Number.isFinite(lo) || !Number.isFinite(hi)) { lo = -10; hi = 10; }
-    if (lo === hi) { lo -= 1; hi += 1; }
-    const pad = (hi - lo) * 0.15;
+    if (!Number.isFinite(lo) || !Number.isFinite(hi)) {
+      lo = -10;
+      hi = 10;
+    }
+    if (lo === hi) {
+      lo -= 1;
+      hi += 1;
+    }
+    const pad = (hi - lo) * 0.2;
     return {
       xmin: srcXmin,
       xmax: srcXmax,
@@ -234,131 +588,56 @@ export function PlotBlock({ source }: { source: string }) {
     };
   }, [srcXmin, srcXmax, fns]);
 
-  /* Interactive view (pannable) */
-  const [view, setView] = useState(initialView);
-  useEffect(() => { setView(initialView); }, [initialView]);
-  const { xmin, xmax, ymin, ymax } = view;
+  const [view, setView] = useState<View>(initialView);
+  useEffect(() => setView(initialView), [initialView]);
 
-  /* Sample paths over current view */
-  const paths = useMemo(() => {
-    const N = 600;
-    const samples: Array<Array<{ x: number; y: number | null }>> = fns.map(() => []);
-    for (let i = 0; i <= N; i++) {
-      const x = xmin + ((xmax - xmin) * i) / N;
-      fns.forEach((f, fi) => {
+  const [fullscreen, setFullscreen] = useState(false);
+
+  // ESC to exit fullscreen + lock body scroll
+  useEffect(() => {
+    if (!fullscreen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setFullscreen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prev;
+    };
+  }, [fullscreen]);
+
+  /* Info panel data (computed on initial view so it represents the function fully) */
+  const info = useMemo(() => {
+    return fns.map((f, i) => {
+      const xmin = srcXmin;
+      const xmax = srcXmax;
+      const roots = findRoots(f.fn, xmin, xmax);
+      const yInt = xmin <= 0 && xmax >= 0 ? f.fn(0) : NaN;
+      const extrema = findExtrema(f.fn, xmin, xmax);
+      // sample range
+      let lo = Infinity;
+      let hi = -Infinity;
+      for (let k = 0; k <= 400; k++) {
+        const x = xmin + ((xmax - xmin) * k) / 400;
         const y = f.fn(x);
-        if (Number.isFinite(y) && Math.abs(y) < 1e6) samples[fi].push({ x, y });
-        else samples[fi].push({ x, y: null });
-      });
-    }
-    return samples;
-  }, [xmin, xmax, fns]);
-
-  /* Notable points: roots, y-intercepts, intersections, manual */
-  const autoPoints = useMemo(() => {
-    const list: Array<{
-      x: number;
-      y: number;
-      label: string;
-      color: string;
-      kind: "akar" | "potong-y" | "puncak" | "lembah" | "perpotongan" | "manual";
-      fnLabel?: string;
-    }> = [];
-    fns.forEach((f, i) => {
-      const c = COLORS[i % COLORS.length].stroke;
-      // x-intercepts
-      for (const r of findRoots(f.fn, xmin, xmax)) {
-        list.push({
-          x: r,
-          y: 0,
-          label: `(${fmt(r)}, 0)`,
-          color: c,
-          kind: "akar",
-          fnLabel: f.label,
-        });
-      }
-      // y-intercept
-      if (xmin <= 0 && xmax >= 0) {
-        const y0 = f.fn(0);
-        if (Number.isFinite(y0)) {
-          list.push({
-            x: 0,
-            y: y0,
-            label: `(0, ${fmt(y0)})`,
-            color: c,
-            kind: "potong-y",
-            fnLabel: f.label,
-          });
+        if (Number.isFinite(y) && Math.abs(y) < 1e8) {
+          if (y < lo) lo = y;
+          if (y > hi) hi = y;
         }
       }
-      // local extrema (vertex / peaks / troughs)
-      for (const e of findExtrema(f.fn, xmin, xmax)) {
-        list.push({
-          x: e.x,
-          y: e.y,
-          label: `(${fmt(e.x)}, ${fmt(e.y)})`,
-          color: c,
-          kind: e.kind === "max" ? "puncak" : "lembah",
-          fnLabel: f.label,
-        });
-      }
+      return {
+        label: f.label,
+        color: COLORS[i % COLORS.length],
+        domain: `[${fmt(xmin)}, ${fmt(xmax)}]`,
+        range: Number.isFinite(lo) ? `[${fmt(lo)}, ${fmt(hi)}]` : "—",
+        roots,
+        yInt,
+        extrema,
+      };
     });
-    // intersections between curves
-    for (let i = 0; i < fns.length; i++) {
-      for (let j = i + 1; j < fns.length; j++) {
-        for (const p of findIntersections(fns[i].fn, fns[j].fn, xmin, xmax)) {
-          list.push({
-            x: p.x,
-            y: p.y,
-            label: `(${fmt(p.x)}, ${fmt(p.y)})`,
-            color: "#111827",
-            kind: "perpotongan",
-            fnLabel: `${fns[i].label}  ∩  ${fns[j].label}`,
-          });
-        }
-      }
-    }
-    return list;
-  }, [fns, xmin, xmax]);
-
-  const points = useMemo(() => {
-    const fromManual = manualPoints.map((p) => ({
-      x: p.x,
-      y: p.y,
-      label: p.label ?? `(${fmt(p.x)}, ${fmt(p.y)})`,
-      color: p.color ?? "#111827",
-      kind: "manual" as const,
-      fnLabel: undefined as string | undefined,
-    }));
-    const all = [...autoPoints, ...fromManual];
-    // de-dupe close points
-    const out: typeof all = [];
-    for (const p of all) {
-      if (!out.some((q) => Math.abs(q.x - p.x) < 1e-3 && Math.abs(q.y - p.y) < 1e-3 && q.label === p.label)) {
-        out.push(p);
-      }
-    }
-    return out;
-  }, [autoPoints, manualPoints]);
-
-  const [hoverIdx, setHoverIdx] = useState<number | null>(null);
-  const [hoverX, setHoverX] = useState<number | null>(null);
-  const dragRef = useRef<{
-    active: boolean;
-    startX: number;
-    startY: number;
-    view: { xmin: number; xmax: number; ymin: number; ymax: number };
-  }>({ active: false, startX: 0, startY: 0, view: initialView });
-
-
-  const KIND_LABEL: Record<string, string> = {
-    "akar": "Akar / titik potong sumbu x",
-    "potong-y": "Titik potong sumbu y",
-    "puncak": "Titik puncak (maksimum)",
-    "lembah": "Titik lembah (minimum)",
-    "perpotongan": "Perpotongan dua kurva",
-    "manual": "Titik penting",
-  };
+  }, [fns, srcXmin, srcXmax]);
 
   if (fns.length === 0) {
     return (
@@ -368,566 +647,118 @@ export function PlotBlock({ source }: { source: string }) {
     );
   }
 
-  /* ---------- SVG viewport (square plot, draggable to resize) ---------- */
-  const M = { top: 18, right: 22, bottom: 20, left: 28 };
-  const S = 300; // fixed square plot size (ChatGPT-style)
-  const xSpan = xmax - xmin;
-  const ySpan = ymax - ymin;
-  // unit px per 1 axis-unit; chosen so cells stay square and both axes fit in S
-  const unit = S / Math.max(xSpan, ySpan);
-  const innerW = S;
-  const innerH = S;
-  // content (axis-mapped area) is centered inside square box
-  const contentW = unit * xSpan;
-  const contentH = unit * ySpan;
-  const offX = (S - contentW) / 2;
-  const offY = (S - contentH) / 2;
-  const W = innerW + M.left + M.right;
-  const H = innerH + M.top + M.bottom;
-
-  const sx = (x: number) => M.left + offX + ((x - xmin) / xSpan) * contentW;
-  const sy = (y: number) => M.top + offY + ((ymax - y) / ySpan) * contentH;
-
-  const xTicks = unitTicks(xmin, xmax);
-  const yTicks = unitTicks(ymin, ymax, true);
-
-  // Axis y position for x-axis label (clamp axis to inside if 0 outside range)
-  const axisY = sy(Math.min(Math.max(0, ymin), ymax));
-  const axisX = sx(Math.min(Math.max(0, xmin), xmax));
-
-  /* Build path strings, splitting on null gaps */
-  const buildPath = (samples: Array<{ x: number; y: number | null }>) => {
-    let d = "";
-    let pen = false;
-    for (const p of samples) {
-      if (p.y === null) {
-        pen = false;
-        continue;
-      }
-      const px = sx(p.x);
-      const py = sy(p.y);
-      // clip to inner area vertically
-      if (py < M.top - 4 || py > M.top + innerH + 4) {
-        pen = false;
-        continue;
-      }
-      d += `${pen ? "L" : "M"}${px.toFixed(2)},${py.toFixed(2)}`;
-      pen = true;
-    }
-    return d;
-  };
-
-  /* Function curve labels placed near a sample at ~85% along x */
-  const curveLabels = fns.map((f, i) => {
-    const samples = paths[i];
-    const want = Math.floor(samples.length * 0.86);
-    let idx = want;
-    while (idx < samples.length && samples[idx].y === null) idx++;
-    if (idx >= samples.length) {
-      idx = samples.findIndex((p) => p.y !== null);
-    }
-    const s = samples[idx];
-    if (!s || s.y === null) return null;
-    return {
-      x: sx(s.x),
-      y: sy(s.y) - 8,
-      label: f.label,
-      color: COLORS[i % COLORS.length].stroke,
-    };
-  });
-
-  return (
-    <div className="not-prose my-4 inline-block max-w-full overflow-hidden rounded-2xl border border-border/60 bg-gradient-to-br from-card via-card to-accent/30 shadow-soft ring-1 ring-black/[0.02]" style={{ width: W + 24 }}>
+  const Card = (
+    <div className="not-prose flex w-full flex-col overflow-hidden rounded-3xl border border-slate-200/80 bg-white shadow-[0_2px_8px_-2px_rgba(15,23,42,0.06),0_12px_40px_-12px_rgba(15,23,42,0.12)]">
       {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 bg-gradient-to-r from-primary/8 via-primary/5 to-transparent px-4 py-3">
-        <div className="flex items-center gap-2">
-          <div className="grid h-7 w-7 place-items-center rounded-lg bg-gradient-primary text-primary-foreground shadow-sm">
+      <div className="flex items-center justify-between gap-2 border-b border-slate-100 bg-gradient-to-r from-blue-50/60 via-white to-white px-4 py-3">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 text-white shadow-sm shadow-blue-500/30">
             <TrendingUp className="h-4 w-4" />
           </div>
-          <div className="text-sm font-semibold tracking-tight text-foreground">
-            Grafik Fungsi
-          </div>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <button
-            type="button"
-            onClick={() => setView(initialView)}
-            className="rounded-full border border-border/60 bg-background/80 px-2 py-0.5 font-mono text-[10.5px] text-muted-foreground transition hover:bg-background hover:text-foreground"
-          >
-            reset
-          </button>
-          <div className="rounded-full border border-border/60 bg-background/80 px-2 py-0.5 font-mono text-[10.5px] text-muted-foreground">
-            x∈[{fmt(xmin)},{fmt(xmax)}]
-          </div>
-        </div>
-      </div>
-
-      {/* Function chips */}
-      <div className="flex flex-wrap gap-1.5 px-4 pt-3">
-        {fns.map((f, i) => {
-          const c = COLORS[i % COLORS.length];
-          return (
-            <div
-              key={f.label}
-              className="flex items-center gap-1.5 rounded-full border border-border/60 bg-background/80 px-2.5 py-1 font-mono text-[11.5px] text-foreground/90 shadow-sm"
-            >
-              <span className="h-2 w-2 rounded-full" style={{ background: c.stroke }} />
-              {f.label}
+          <div className="min-w-0">
+            <div className="truncate text-[13px] font-semibold tracking-tight text-slate-900">Grafik Fungsi</div>
+            <div className="truncate font-mono text-[11px] text-slate-500">
+              {fns.map((f) => f.label).join("  ·  ")}
             </div>
-          );
-        })}
-      </div>
-
-      {/* SVG plot */}
-      <div className="relative p-3" style={{ width: W + 24 }}>
-        <svg
-          viewBox={`0 0 ${W} ${H}`}
-          width={W}
-          height={H}
-          className="block select-none"
-          preserveAspectRatio="xMidYMid meet"
-          role="img"
-          aria-label="Grafik fungsi"
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => setFullscreen((v) => !v)}
+          className="grid h-8 w-8 shrink-0 place-items-center rounded-xl border border-slate-200 bg-white text-slate-600 transition hover:bg-blue-50 hover:text-blue-600 active:scale-95"
+          aria-label={fullscreen ? "Tutup fullscreen" : "Fullscreen"}
         >
-          <defs>
-            <marker
-              id="arrow-axis"
-              viewBox="0 0 10 10"
-              refX="8"
-              refY="5"
-              markerWidth="7"
-              markerHeight="7"
-              orient="auto-start-reverse"
-            >
-              <path d="M0,0 L10,5 L0,10 z" fill="#1f2937" />
-            </marker>
-            {fns.map((_, i) => (
-              <linearGradient
+          {fullscreen ? <X className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
+        </button>
+      </div>
+
+      {/* Body: graph + info panel */}
+      <div className={fullscreen ? "flex h-full min-h-0 flex-1 flex-col lg:flex-row" : "flex flex-col lg:flex-row"}>
+        <div className={fullscreen ? "flex-1 min-h-0 p-3" : "flex-1 p-3"}>
+          <PlotSurface
+            fns={fns}
+            manualPoints={manualPoints}
+            view={view}
+            setView={setView}
+            initialView={initialView}
+            height={fullscreen ? Math.max(420, window.innerHeight - 220) : 380}
+          />
+        </div>
+
+        {/* Info panel */}
+        <div className="border-t border-slate-100 bg-slate-50/40 p-3 lg:w-72 lg:border-l lg:border-t-0">
+          <div className="space-y-2.5">
+            {info.map((it, i) => (
+              <div
                 key={i}
-                id={`plot-stroke-${i}`}
-                x1="0"
-                x2="1"
-                y1="0"
-                y2="0"
+                className="animate-fade-in rounded-2xl border border-slate-200/80 bg-white p-3 shadow-sm"
               >
-                <stop offset="0%" stopColor={COLORS[i % COLORS.length].stroke} />
-                <stop offset="100%" stopColor={COLORS[i % COLORS.length].glow} />
-              </linearGradient>
-            ))}
-          </defs>
-
-          {/* Background */}
-          <rect
-            x={M.left}
-            y={M.top}
-            width={innerW}
-            height={innerH}
-            fill="#ffffff"
-            stroke="#e5e7eb"
-            rx={10}
-          />
-
-          {/* Mouse capture for crosshair + drag-to-pan */}
-          <rect
-            x={M.left}
-            y={M.top}
-            width={innerW}
-            height={innerH}
-            fill="transparent"
-            style={{ cursor: dragRef.current.active ? "grabbing" : "crosshair" }}
-            onMouseDown={(e) => {
-              dragRef.current = {
-                active: true,
-                startX: e.clientX,
-                startY: e.clientY,
-                view: { xmin, xmax, ymin, ymax },
-              };
-              setHoverX(null);
-            }}
-            onMouseMove={(e) => {
-              const svg = (e.currentTarget.ownerSVGElement ?? e.currentTarget) as SVGSVGElement;
-              const rect = svg.getBoundingClientRect();
-              if (dragRef.current.active) {
-                const pxPerUnitX = (rect.width / W) * (innerW / (dragRef.current.view.xmax - dragRef.current.view.xmin));
-                const pxPerUnitY = (rect.height / H) * (innerH / (dragRef.current.view.ymax - dragRef.current.view.ymin));
-                const dx = (e.clientX - dragRef.current.startX) / pxPerUnitX;
-                const dy = (e.clientY - dragRef.current.startY) / pxPerUnitY;
-                const v = dragRef.current.view;
-                setView({
-                  xmin: v.xmin - dx, xmax: v.xmax - dx,
-                  ymin: v.ymin + dy, ymax: v.ymax + dy,
-                });
-                return;
-              }
-              const vbX = ((e.clientX - rect.left) / rect.width) * W;
-              const dx = xmin + ((vbX - M.left) / innerW) * (xmax - xmin);
-              if (dx >= xmin && dx <= xmax) setHoverX(dx);
-            }}
-            onMouseUp={() => { dragRef.current.active = false; }}
-            onMouseLeave={() => { dragRef.current.active = false; setHoverX(null); }}
-          />
-
-
-          {/* Dotted square grid (unit) */}
-          <g stroke="#cbd5e1" strokeWidth={0.7} strokeDasharray="1,3" strokeLinecap="round">
-            {xTicks.map((t) => (
-              <line
-                key={`gx-${t}`}
-                x1={sx(t)}
-                x2={sx(t)}
-                y1={M.top}
-                y2={M.top + innerH}
-              />
-            ))}
-            {yTicks.map((t) => (
-              <line
-                key={`gy-${t}`}
-                x1={M.left}
-                x2={M.left + innerW}
-                y1={sy(t)}
-                y2={sy(t)}
-              />
-            ))}
-          </g>
-
-          {/* Axes with arrowheads */}
-          <g stroke="#1f2937" strokeWidth={1.4} fill="none">
-            {/* x-axis */}
-            <line
-              x1={M.left}
-              x2={M.left + innerW}
-              y1={axisY}
-              y2={axisY}
-              markerEnd="url(#arrow-axis)"
-            />
-            {/* y-axis */}
-            <line
-              x1={axisX}
-              x2={axisX}
-              y1={M.top + innerH}
-              y2={M.top}
-              markerEnd="url(#arrow-axis)"
-            />
-          </g>
-
-          {/* Axis labels x, y */}
-          <text
-            x={M.left + innerW + 4}
-            y={axisY + 4}
-            fontSize={13}
-            fontStyle="italic"
-            fill="#1f2937"
-          >
-            x
-          </text>
-          <text
-            x={axisX + 6}
-            y={M.top - 6}
-            fontSize={13}
-            fontStyle="italic"
-            fill="#1f2937"
-          >
-            y
-          </text>
-
-          {/* Tick marks + numbers on x-axis */}
-          <g fontSize={10} fill="#475569" fontFamily="ui-sans-serif, system-ui">
-            {xTicks.map((t) => {
-              if (Math.abs(t) < 1e-9) return null;
-              const x = sx(t);
-              return (
-                <g key={`tx-${t}`}>
-                  <line
-                    x1={x}
-                    x2={x}
-                    y1={axisY - 3}
-                    y2={axisY + 3}
-                    stroke="#1f2937"
-                    strokeWidth={1.2}
-                  />
-                  <text x={x} y={axisY + 14} textAnchor="middle">
-                    {fmt(t)}
-                  </text>
-                </g>
-              );
-            })}
-            {/* origin label */}
-            {xmin <= 0 && xmax >= 0 && ymin <= 0 && ymax >= 0 && (
-              <text x={axisX - 6} y={axisY + 14} textAnchor="end">
-                0
-              </text>
-            )}
-          </g>
-
-          {/* Tick marks + numbers on y-axis */}
-          <g fontSize={10} fill="#475569" fontFamily="ui-sans-serif, system-ui">
-            {yTicks.map((t) => {
-              if (Math.abs(t) < 1e-9) return null;
-              const y = sy(t);
-              return (
-                <g key={`ty-${t}`}>
-                  <line
-                    x1={axisX - 3}
-                    x2={axisX + 3}
-                    y1={y}
-                    y2={y}
-                    stroke="#1f2937"
-                    strokeWidth={1.2}
-                  />
-                  <text x={axisX - 6} y={y + 3} textAnchor="end">
-                    {fmt(t)}
-                  </text>
-                </g>
-              );
-            })}
-          </g>
-
-          {/* Clip curves to plot area */}
-          <clipPath id="plot-clip">
-            <rect
-              x={M.left}
-              y={M.top}
-              width={innerW}
-              height={innerH}
-              rx={10}
-            />
-          </clipPath>
-
-          {/* Function curves */}
-          <g clipPath="url(#plot-clip)" fill="none" strokeLinecap="round" strokeLinejoin="round">
-            {fns.map((_, i) => (
-              <path
-                key={`curve-${i}`}
-                d={buildPath(paths[i])}
-                stroke={COLORS[i % COLORS.length].stroke}
-                strokeWidth={2.2}
-              />
-            ))}
-          </g>
-
-          {/* Curve labels */}
-          <g fontSize={12} fontFamily="ui-sans-serif, system-ui" fontWeight={600}>
-            {curveLabels.map((lbl, i) =>
-              lbl ? (
-                <g key={`lbl-${i}`}>
-                  <text
-                    x={lbl.x}
-                    y={lbl.y}
-                    fill="#ffffff"
-                    stroke="#ffffff"
-                    strokeWidth={4}
-                    paintOrder="stroke"
-                    textAnchor="middle"
-                  >
-                    {lbl.label}
-                  </text>
-                  <text
-                    x={lbl.x}
-                    y={lbl.y}
-                    fill={lbl.color}
-                    textAnchor="middle"
-                  >
-                    {lbl.label}
-                  </text>
-                </g>
-              ) : null
-            )}
-          </g>
-
-          {/* Crosshair: vertical line + dot on each curve at hovered x */}
-          {hoverX !== null && (
-            <g pointerEvents="none">
-              <line
-                x1={sx(hoverX)}
-                x2={sx(hoverX)}
-                y1={M.top}
-                y2={M.top + innerH}
-                stroke="#64748b"
-                strokeWidth={1}
-                strokeDasharray="3 3"
-              />
-              {fns.map((f, i) => {
-                const y = f.fn(hoverX);
-                if (!Number.isFinite(y)) return null;
-                const cy = sy(y);
-                if (cy < M.top - 2 || cy > M.top + innerH + 2) return null;
-                const c = COLORS[i % COLORS.length];
-                return (
-                  <g key={`xh-${i}`}>
-                    <circle
-                      cx={sx(hoverX)}
-                      cy={cy}
-                      r={8}
-                      fill={c.stroke}
-                      opacity={0.16}
-                    />
-                    <circle
-                      cx={sx(hoverX)}
-                      cy={cy}
-                      r={4}
-                      fill={c.stroke}
-                      stroke="#ffffff"
-                      strokeWidth={1.6}
-                    />
-                  </g>
-                );
-              })}
-            </g>
-          )}
-
-          {/* Notable points + labels */}
-          <g fontSize={10.5} fontFamily="ui-sans-serif, system-ui">
-            {points.map((p, i) => {
-              const px = sx(p.x);
-              const py = sy(p.y);
-              if (
-                px < M.left - 2 ||
-                px > M.left + innerW + 2 ||
-                py < M.top - 2 ||
-                py > M.top + innerH + 2
-              )
-                return null;
-              // place label offset away from axes
-              const offX = p.x >= 0 ? 6 : -6;
-              const offY = p.y >= 0 ? -8 : 14;
-              const anchor = p.x >= 0 ? "start" : "end";
-              const isHover = hoverIdx === i;
-              return (
-                <g key={`pt-${i}`}>
-                  {isHover && (
-                    <circle
-                      cx={px}
-                      cy={py}
-                      r={9}
-                      fill={p.color}
-                      opacity={0.18}
-                    />
-                  )}
-                  <circle
-                    cx={px}
-                    cy={py}
-                    r={isHover ? 5 : 3.6}
-                    fill={p.color}
-                    stroke="#ffffff"
-                    strokeWidth={1.6}
-                  />
-                  {/* invisible larger hit area */}
-                  <circle
-                    cx={px}
-                    cy={py}
-                    r={12}
-                    fill="transparent"
-                    style={{ cursor: "pointer" }}
-                    onMouseEnter={() => setHoverIdx(i)}
-                    onMouseLeave={() =>
-                      setHoverIdx((cur) => (cur === i ? null : cur))
-                    }
-                  />
-                  <text
-                    x={px + offX}
-                    y={py + offY}
-                    fill="#ffffff"
-                    stroke="#ffffff"
-                    strokeWidth={3.5}
-                    paintOrder="stroke"
-                    textAnchor={anchor}
-                    fontWeight={600}
-                    pointerEvents="none"
-                  >
-                    {p.label}
-                  </text>
-                  <text
-                    x={px + offX}
-                    y={py + offY}
-                    fill={p.color}
-                    textAnchor={anchor}
-                    fontWeight={600}
-                    pointerEvents="none"
-                  >
-                    {p.label}
-                  </text>
-                </g>
-              );
-            })}
-          </g>
-        </svg>
-
-        {/* Crosshair coordinate tooltip: lists y for every function */}
-        {hoverX !== null && hoverIdx === null && (() => {
-          const px = sx(hoverX);
-          const leftPct = (px / W) * 100;
-          const flipX = leftPct > 65;
-          return (
-            <div
-              className="pointer-events-none absolute z-10 min-w-[11rem] rounded-xl border border-border/70 bg-white/95 px-3 py-2 text-[11.5px] shadow-lg backdrop-blur"
-              style={{
-                left: `calc(${leftPct}% + ${flipX ? "-12px" : "12px"})`,
-                top: `12px`,
-                transform: flipX ? "translateX(-100%)" : "none",
-              }}
-            >
-              <div className="font-mono font-semibold text-foreground">
-                x = {fmt(hoverX)}
-              </div>
-              <div className="mt-1 space-y-0.5">
-                {fns.map((f, i) => {
-                  const y = f.fn(hoverX);
-                  const c = COLORS[i % COLORS.length].stroke;
-                  return (
-                    <div key={i} className="flex items-center gap-1.5 font-mono">
-                      <span
-                        className="h-2 w-2 rounded-full"
-                        style={{ background: c }}
-                      />
-                      <span className="text-muted-foreground">{f.label}:</span>
-                      <span style={{ color: c }} className="font-semibold">
-                        ({fmt(hoverX)}, {Number.isFinite(y) ? fmt(y) : "—"})
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          );
-        })()}
-
-        {/* Hover tooltip overlay (HTML, positioned via percentages) */}
-        {hoverIdx !== null && points[hoverIdx] && (() => {
-          const p = points[hoverIdx];
-          const px = sx(p.x);
-          const py = sy(p.y);
-          const leftPct = (px / W) * 100;
-          const topPct = (py / H) * 100;
-          const flipX = leftPct > 65;
-          const flipY = topPct < 22;
-          return (
-            <div
-              className="pointer-events-none absolute z-10 min-w-[10rem] rounded-xl border border-border/70 bg-white/95 px-3 py-2 text-[11.5px] shadow-lg backdrop-blur"
-              style={{
-                left: `calc(${leftPct}% + ${flipX ? "-12px" : "12px"})`,
-                top: `calc(${topPct}% + ${flipY ? "12px" : "-12px"})`,
-                transform: `translate(${flipX ? "-100%" : "0"}, ${flipY ? "0" : "-100%"})`,
-              }}
-            >
-              <div className="flex items-center gap-1.5 font-semibold text-foreground">
-                <span
-                  className="h-2 w-2 rounded-full"
-                  style={{ background: p.color }}
-                />
-                {KIND_LABEL[p.kind] ?? "Titik penting"}
-              </div>
-              <div className="mt-1 font-mono text-foreground/90">
-                koordinat: <span style={{ color: p.color }}>{p.label}</span>
-              </div>
-              {p.fnLabel && (
-                <div className="mt-0.5 font-mono text-[10.5px] text-muted-foreground">
-                  {p.fnLabel}
+                <div className="flex items-center gap-2">
+                  <span className="h-2.5 w-2.5 rounded-full" style={{ background: it.color }} />
+                  <span className="truncate font-mono text-[12px] font-semibold text-slate-900">
+                    {it.label}
+                  </span>
                 </div>
-              )}
-            </div>
-          );
-        })()}
+                <dl className="mt-2 space-y-1 text-[11.5px]">
+                  <div className="flex justify-between gap-2">
+                    <dt className="text-slate-500">Domain</dt>
+                    <dd className="font-mono text-slate-800">{it.domain}</dd>
+                  </div>
+                  <div className="flex justify-between gap-2">
+                    <dt className="text-slate-500">Range</dt>
+                    <dd className="font-mono text-slate-800">{it.range}</dd>
+                  </div>
+                  <div className="flex justify-between gap-2">
+                    <dt className="text-slate-500">Potong-y</dt>
+                    <dd className="font-mono text-slate-800">
+                      {Number.isFinite(it.yInt) ? `(0, ${fmt(it.yInt)})` : "—"}
+                    </dd>
+                  </div>
+                  <div className="flex justify-between gap-2">
+                    <dt className="text-slate-500">Akar</dt>
+                    <dd className="font-mono text-right text-slate-800">
+                      {it.roots.length
+                        ? it.roots.slice(0, 3).map((r) => `(${fmt(r)}, 0)`).join(", ")
+                        : "—"}
+                    </dd>
+                  </div>
+                  {it.extrema.length > 0 && (
+                    <div className="flex justify-between gap-2">
+                      <dt className="text-slate-500">Titik balik</dt>
+                      <dd className="font-mono text-right text-slate-800">
+                        {it.extrema
+                          .slice(0, 2)
+                          .map((e) => `${e.kind === "max" ? "↑" : "↓"} (${fmt(e.x)}, ${fmt(e.y)})`)
+                          .join(", ")}
+                      </dd>
+                    </div>
+                  )}
+                </dl>
+              </div>
+            ))}
+            <p className="px-1 text-[10.5px] leading-relaxed text-slate-400">
+              Geser untuk menggeser · scroll / pinch untuk zoom · tombol reset untuk kembali.
+            </p>
+          </div>
+        </div>
       </div>
     </div>
   );
+
+  if (fullscreen) {
+    return (
+      <>
+        <div className="not-prose my-4 rounded-3xl border border-dashed border-blue-200 bg-blue-50/30 px-4 py-6 text-center text-sm text-blue-600">
+          Grafik ditampilkan dalam mode fullscreen
+        </div>
+        <div className="fixed inset-0 z-[100] flex animate-fade-in items-center justify-center bg-slate-900/40 p-3 backdrop-blur-sm sm:p-6">
+          <div className="flex h-full max-h-[96vh] w-full max-w-6xl animate-scale-in">
+            {Card}
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  return <div className="not-prose my-4 animate-fade-in">{Card}</div>;
 }
