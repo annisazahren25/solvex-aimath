@@ -501,23 +501,46 @@ export function PlotBlock({ source }: { source: string }) {
             rx={10}
           />
 
-          {/* Mouse capture for crosshair (rendered above background, below points) */}
+          {/* Mouse capture for crosshair + drag-to-pan */}
           <rect
             x={M.left}
             y={M.top}
             width={innerW}
             height={innerH}
             fill="transparent"
-            style={{ cursor: "crosshair" }}
+            style={{ cursor: dragRef.current.active ? "grabbing" : "crosshair" }}
+            onMouseDown={(e) => {
+              dragRef.current = {
+                active: true,
+                startX: e.clientX,
+                startY: e.clientY,
+                view: { xmin, xmax, ymin, ymax },
+              };
+              setHoverX(null);
+            }}
             onMouseMove={(e) => {
               const svg = (e.currentTarget.ownerSVGElement ?? e.currentTarget) as SVGSVGElement;
               const rect = svg.getBoundingClientRect();
+              if (dragRef.current.active) {
+                const pxPerUnitX = (rect.width / W) * (innerW / (dragRef.current.view.xmax - dragRef.current.view.xmin));
+                const pxPerUnitY = (rect.height / H) * (innerH / (dragRef.current.view.ymax - dragRef.current.view.ymin));
+                const dx = (e.clientX - dragRef.current.startX) / pxPerUnitX;
+                const dy = (e.clientY - dragRef.current.startY) / pxPerUnitY;
+                const v = dragRef.current.view;
+                setView({
+                  xmin: v.xmin - dx, xmax: v.xmax - dx,
+                  ymin: v.ymin + dy, ymax: v.ymax + dy,
+                });
+                return;
+              }
               const vbX = ((e.clientX - rect.left) / rect.width) * W;
               const dx = xmin + ((vbX - M.left) / innerW) * (xmax - xmin);
               if (dx >= xmin && dx <= xmax) setHoverX(dx);
             }}
-            onMouseLeave={() => setHoverX(null)}
+            onMouseUp={() => { dragRef.current.active = false; }}
+            onMouseLeave={() => { dragRef.current.active = false; setHoverX(null); }}
           />
+
 
           {/* Minor grid (half-unit) */}
           <g stroke="#f1f5f9" strokeWidth={0.6}>
