@@ -473,7 +473,7 @@ function PlotSurface({
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerUp}
-        onPointerLeave={handlePointerUp}
+        onPointerLeave={handlePointerLeave}
         onWheel={handleWheel}
         role="img"
         aria-label="Grafik fungsi interaktif"
