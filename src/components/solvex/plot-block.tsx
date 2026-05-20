@@ -398,6 +398,8 @@ function PlotSurface({
   };
 
   const handleWheel = (e: React.WheelEvent<SVGSVGElement>) => {
+    // Only zoom when user explicitly holds Ctrl/Cmd — otherwise let the page scroll.
+    if (!e.ctrlKey && !e.metaKey) return;
     e.preventDefault();
     const rect = e.currentTarget.getBoundingClientRect();
     const cxPx = e.clientX - rect.left;
