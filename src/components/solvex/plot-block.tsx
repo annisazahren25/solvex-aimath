@@ -343,12 +343,16 @@ export function PlotBlock({ source }: { source: string }) {
 
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
   const [hoverX, setHoverX] = useState<number | null>(null);
+  const [size, setSize] = useState(260); // square inner side (px)
   const dragRef = useRef<{
     active: boolean;
     startX: number;
     startY: number;
     view: { xmin: number; xmax: number; ymin: number; ymax: number };
   }>({ active: false, startX: 0, startY: 0, view: initialView });
+  const resizeRef = useRef<{ active: boolean; startX: number; startY: number; start: number }>({
+    active: false, startX: 0, startY: 0, start: 260,
+  });
 
 
   const KIND_LABEL: Record<string, string> = {
