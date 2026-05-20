@@ -343,6 +343,13 @@ export function PlotBlock({ source }: { source: string }) {
 
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
   const [hoverX, setHoverX] = useState<number | null>(null);
+  const dragRef = useRef<{
+    active: boolean;
+    startX: number;
+    startY: number;
+    view: { xmin: number; xmax: number; ymin: number; ymax: number };
+  }>({ active: false, startX: 0, startY: 0, view: initialView });
+
 
   const KIND_LABEL: Record<string, string> = {
     "akar": "Akar / titik potong sumbu x",
