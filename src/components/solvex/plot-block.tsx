@@ -374,7 +374,7 @@ export function PlotBlock({ source }: { source: string }) {
   const innerW = W - M.left - M.right;
   // Square cells: derive innerH from per-unit pixel size on X.
   const unit = innerW / (xmax - xmin);
-  const innerH = Math.min(unit * (ymax - ymin), 260);
+  const innerH = unit * (ymax - ymin);
   const H = innerH + M.top + M.bottom;
 
   const sx = (x: number) => M.left + ((x - xmin) / (xmax - xmin)) * innerW;
