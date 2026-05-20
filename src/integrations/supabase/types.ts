@@ -14,13 +14,306 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      messages: {
+        Row: {
+          created_at: string
+          id: string
+          is_locked: boolean
+          parts: Json
+          role: string
+          thread_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_locked?: boolean
+          parts: Json
+          role: string
+          thread_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_locked?: boolean
+          parts?: Json
+          role?: string
+          thread_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "messages_thread_id_fkey"
+            columns: ["thread_id"]
+            isOneToOne: false
+            referencedRelation: "threads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      payment_transactions: {
+        Row: {
+          amount: number
+          created_at: string
+          currency: string
+          id: string
+          method: string
+          plan: string
+          reference: string
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          currency?: string
+          id?: string
+          method: string
+          plan: string
+          reference: string
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          currency?: string
+          id?: string
+          method?: string
+          plan?: string
+          reference?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          full_name: string | null
+          id: string
+          updated_at: string
+          username: string | null
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          full_name?: string | null
+          id: string
+          updated_at?: string
+          username?: string | null
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          full_name?: string | null
+          id?: string
+          updated_at?: string
+          username?: string | null
+        }
+        Relationships: []
+      }
+      subscriptions: {
+        Row: {
+          created_at: string
+          current_period_end: string | null
+          id: string
+          plan: string
+          status: string
+          stripe_customer_id: string | null
+          stripe_subscription_id: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          current_period_end?: string | null
+          id?: string
+          plan?: string
+          status?: string
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          current_period_end?: string | null
+          id?: string
+          plan?: string
+          status?: string
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      threads: {
+        Row: {
+          created_at: string
+          id: string
+          is_locked_pending_ad: boolean
+          message_count: number
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_locked_pending_ad?: boolean
+          message_count?: number
+          title?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_locked_pending_ad?: boolean
+          message_count?: number
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      usage_daily: {
+        Row: {
+          ads_watched: number
+          bonus_uploads: number
+          created_at: string
+          day: string
+          id: string
+          image_uploads: number
+          user_id: string
+        }
+        Insert: {
+          ads_watched?: number
+          bonus_uploads?: number
+          created_at?: string
+          day?: string
+          id?: string
+          image_uploads?: number
+          user_id: string
+        }
+        Update: {
+          ads_watched?: number
+          bonus_uploads?: number
+          created_at?: string
+          day?: string
+          id?: string
+          image_uploads?: number
+          user_id?: string
+        }
+        Relationships: []
+      }
+      usage_stats: {
+        Row: {
+          questions_solved: number
+          total_ads_watched: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          questions_solved?: number
+          total_ads_watched?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          questions_solved?: number
+          total_ads_watched?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      add_bonus_upload: {
+        Args: { _day?: string; _uid: string }
+        Returns: {
+          ads_watched: number
+          bonus_uploads: number
+          created_at: string
+          day: string
+          id: string
+          image_uploads: number
+          user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "usage_daily"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      bump_questions_solved: { Args: { _uid: string }; Returns: undefined }
+      get_or_create_usage_today: {
+        Args: { _day?: string; _uid: string }
+        Returns: {
+          ads_watched: number
+          bonus_uploads: number
+          created_at: string
+          day: string
+          id: string
+          image_uploads: number
+          user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "usage_daily"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      has_pro: { Args: { _uid: string }; Returns: boolean }
+      increment_ads_watched: {
+        Args: { _day?: string; _uid: string }
+        Returns: {
+          ads_watched: number
+          bonus_uploads: number
+          created_at: string
+          day: string
+          id: string
+          image_uploads: number
+          user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "usage_daily"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      increment_image_upload: {
+        Args: { _day?: string; _uid: string }
+        Returns: {
+          ads_watched: number
+          bonus_uploads: number
+          created_at: string
+          day: string
+          id: string
+          image_uploads: number
+          user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "usage_daily"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
     }
     Enums: {
       [_ in never]: never
