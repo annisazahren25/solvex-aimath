@@ -96,11 +96,13 @@ function parsePlot(src: string): Parsed {
 /* Helpers                                                           */
 /* ---------------------------------------------------------------- */
 
-function unitTicks(min: number, max: number): number[] {
+function unitTicks(min: number, max: number, forceUnit = false): number[] {
   const span = max - min;
   let step = 1;
-  if (span > 60) step = Math.ceil(span / 40);
-  else if (span > 30) step = 2;
+  if (!forceUnit) {
+    if (span > 60) step = Math.ceil(span / 40);
+    else if (span > 30) step = 2;
+  }
   const start = Math.ceil(min / step) * step;
   const out: number[] = [];
   for (let v = start; v <= max + 1e-9; v += step) {
