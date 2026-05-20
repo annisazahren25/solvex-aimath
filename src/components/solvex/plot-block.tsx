@@ -354,16 +354,18 @@ export function PlotBlock({ source }: { source: string }) {
 
   /* ---------- SVG viewport ---------- */
   const W = 640;
-  const H = 440;
   const M = { top: 24, right: 28, bottom: 24, left: 28 };
   const innerW = W - M.left - M.right;
-  const innerH = H - M.top - M.bottom;
+  // Make grid cells square: derive innerH from per-unit pixel size on X.
+  const unit = innerW / (xmax - xmin);
+  const innerH = unit * (ymax - ymin);
+  const H = innerH + M.top + M.bottom;
 
   const sx = (x: number) => M.left + ((x - xmin) / (xmax - xmin)) * innerW;
   const sy = (y: number) => M.top + ((ymax - y) / (ymax - ymin)) * innerH;
 
   const xTicks = unitTicks(xmin, xmax);
-  const yTicks = unitTicks(ymin, ymax);
+  const yTicks = unitTicks(ymin, ymax, true);
 
   // Axis y position for x-axis label (clamp axis to inside if 0 outside range)
   const axisY = sy(Math.min(Math.max(0, ymin), ymax));
