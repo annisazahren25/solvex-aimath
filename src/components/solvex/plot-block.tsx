@@ -440,8 +440,17 @@ export function PlotBlock({ source }: { source: string }) {
             Grafik Fungsi
           </div>
         </div>
-        <div className="rounded-full border border-border/60 bg-background/80 px-2.5 py-0.5 font-mono text-[11px] text-muted-foreground">
-          x ∈ [{xmin}, {xmax}] · y ∈ [{ymin}, {ymax}]
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => setView(initialView)}
+            className="rounded-full border border-border/60 bg-background/80 px-2 py-0.5 font-mono text-[10.5px] text-muted-foreground transition hover:bg-background hover:text-foreground"
+          >
+            reset
+          </button>
+          <div className="rounded-full border border-border/60 bg-background/80 px-2 py-0.5 font-mono text-[10.5px] text-muted-foreground">
+            x∈[{fmt(xmin)},{fmt(xmax)}]
+          </div>
         </div>
       </div>
 
