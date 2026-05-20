@@ -203,46 +203,55 @@ const COLORS = [
 /* ---------------------------------------------------------------- */
 
 export function PlotBlock({ source }: { source: string }) {
-  const { xmin, xmax, fns, points: manualPoints } = useMemo(
+  const { xmin: srcXmin, xmax: srcXmax, fns, points: manualPoints } = useMemo(
     () => parsePlot(source),
     [source]
   );
 
-  /* Sample paths and compute y-range */
-  const { paths, ymin, ymax } = useMemo(() => {
-    const N = 800;
-    const samples: Array<Array<{ x: number; y: number | null }>> = fns.map(
-      () => []
-    );
+  /* Compute initial y-range from samples (only when source changes) */
+  const initialView = useMemo(() => {
+    const N = 400;
     let lo = Infinity;
     let hi = -Infinity;
+    for (let i = 0; i <= N; i++) {
+      const x = srcXmin + ((srcXmax - srcXmin) * i) / N;
+      for (const f of fns) {
+        const y = f.fn(x);
+        if (Number.isFinite(y) && Math.abs(y) < 1e6) {
+          if (y < lo) lo = y;
+          if (y > hi) hi = y;
+        }
+      }
+    }
+    if (!Number.isFinite(lo) || !Number.isFinite(hi)) { lo = -10; hi = 10; }
+    if (lo === hi) { lo -= 1; hi += 1; }
+    const pad = (hi - lo) * 0.15;
+    return {
+      xmin: srcXmin,
+      xmax: srcXmax,
+      ymin: Math.floor(lo - pad),
+      ymax: Math.ceil(hi + pad),
+    };
+  }, [srcXmin, srcXmax, fns]);
+
+  /* Interactive view (pannable) */
+  const [view, setView] = useState(initialView);
+  useEffect(() => { setView(initialView); }, [initialView]);
+  const { xmin, xmax, ymin, ymax } = view;
+
+  /* Sample paths over current view */
+  const paths = useMemo(() => {
+    const N = 600;
+    const samples: Array<Array<{ x: number; y: number | null }>> = fns.map(() => []);
     for (let i = 0; i <= N; i++) {
       const x = xmin + ((xmax - xmin) * i) / N;
       fns.forEach((f, fi) => {
         const y = f.fn(x);
-        if (Number.isFinite(y) && Math.abs(y) < 1e6) {
-          samples[fi].push({ x, y });
-          if (y < lo) lo = y;
-          if (y > hi) hi = y;
-        } else {
-          samples[fi].push({ x, y: null });
-        }
+        if (Number.isFinite(y) && Math.abs(y) < 1e6) samples[fi].push({ x, y });
+        else samples[fi].push({ x, y: null });
       });
     }
-    if (!Number.isFinite(lo) || !Number.isFinite(hi)) {
-      lo = -10;
-      hi = 10;
-    }
-    if (lo === hi) {
-      lo -= 1;
-      hi += 1;
-    }
-    const pad = (hi - lo) * 0.12;
-    return {
-      paths: samples,
-      ymin: Math.floor(lo - pad),
-      ymax: Math.ceil(hi + pad),
-    };
+    return samples;
   }, [xmin, xmax, fns]);
 
   /* Notable points: roots, y-intercepts, intersections, manual */
