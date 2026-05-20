@@ -483,7 +483,7 @@ export function PlotBlock({ source }: { source: string }) {
       </div>
 
       {/* SVG plot */}
-      <div className="relative w-full p-3">
+      <div className="relative p-3" style={{ width: W + 24 }}>
         <svg
           viewBox={`0 0 ${W} ${H}`}
           className="block h-auto w-full select-none"
