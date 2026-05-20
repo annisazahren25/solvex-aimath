@@ -923,6 +923,7 @@ export function PlotBlock({ source }: { source: string }) {
                 <div className="mt-0.5 font-mono text-[10.5px] text-muted-foreground">
                   {p.fnLabel}
                 </div>
+              )}
             </div>
           );
         })()}
