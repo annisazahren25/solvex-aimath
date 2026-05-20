@@ -429,7 +429,7 @@ export function PlotBlock({ source }: { source: string }) {
   });
 
   return (
-    <div className="not-prose my-4 overflow-hidden rounded-3xl border border-border/60 bg-gradient-to-br from-card via-card to-accent/30 shadow-soft ring-1 ring-black/[0.02]">
+    <div className="not-prose my-4 inline-block max-w-full overflow-hidden rounded-2xl border border-border/60 bg-gradient-to-br from-card via-card to-accent/30 shadow-soft ring-1 ring-black/[0.02]" style={{ width: 420 }}>
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/60 bg-gradient-to-r from-primary/8 via-primary/5 to-transparent px-4 py-3">
         <div className="flex items-center gap-2">
