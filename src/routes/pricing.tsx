@@ -6,6 +6,7 @@ import { Logo } from "@/components/solvex/logo";
 import { useAuth } from "@/lib/auth-context";
 import { useSubscription } from "@/hooks/use-subscription";
 import { PlanBadge } from "@/components/solvex/plan-badge";
+import { AnimatedBackground } from "@/components/solvex/animated-background";
 
 export const Route = createFileRoute("/pricing")({
   head: () => ({
@@ -77,8 +78,9 @@ function PricingPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-soft">
-      <header className="flex items-center justify-between border-b border-border bg-card/70 px-6 py-4 backdrop-blur">
+    <div className="relative min-h-screen overflow-hidden bg-gradient-soft">
+      <AnimatedBackground variant="soft" />
+      <header className="relative z-10 flex items-center justify-between border-b border-border bg-card/70 px-6 py-4 backdrop-blur">
         <Link to="/"><Logo /></Link>
         <div className="flex items-center gap-3">
           {user && <PlanBadge isPro={isPro} />}

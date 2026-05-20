@@ -3,12 +3,14 @@ import { motion } from "framer-motion";
 import { ArrowRight, Upload, Sparkles, Zap, BookOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/solvex/logo";
+import { AnimatedBackground } from "@/components/solvex/animated-background";
 
 export const Route = createFileRoute("/")({ component: Landing });
 
 function Landing() {
   return (
     <div className="relative min-h-screen overflow-hidden bg-background">
+      <AnimatedBackground variant="default" />
       <header className="relative z-10 flex items-center justify-between px-6 py-5 md:px-12">
         <Logo />
         <nav className="flex items-center gap-2">
@@ -68,14 +70,27 @@ function Landing() {
             { icon: Zap, title: "Instant answers", desc: "Stream step-by-step solutions in real time." },
             { icon: BookOpen, title: "Learn by doing", desc: "Every step explained in plain English." },
             { icon: Upload, title: "Scan & solve", desc: "Snap a photo of your equation, we'll handle the rest." },
-          ].map((f) => (
-            <div key={f.title} className="rounded-2xl border border-border bg-card p-6 text-left shadow-soft">
-              <div className="grid h-10 w-10 place-items-center rounded-xl bg-gradient-primary text-primary-foreground">
+          ].map((f, i) => (
+            <motion.div
+              key={f.title}
+              initial={{ opacity: 0, y: 24 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-60px" }}
+              transition={{ delay: 0.1 + i * 0.08, duration: 0.5, ease: "easeOut" }}
+              whileHover={{ y: -6, transition: { duration: 0.25 } }}
+              className="group relative overflow-hidden rounded-2xl border border-border bg-card/80 p-6 text-left shadow-soft backdrop-blur-sm transition-shadow hover:shadow-glow"
+            >
+              <div className="pointer-events-none absolute inset-0 -z-0 bg-gradient-to-br from-primary/5 via-transparent to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+              <motion.div
+                whileHover={{ rotate: -6, scale: 1.05 }}
+                transition={{ type: "spring", stiffness: 300, damping: 18 }}
+                className="grid h-10 w-10 place-items-center rounded-xl bg-gradient-primary text-primary-foreground shadow-glow"
+              >
                 <f.icon className="h-5 w-5" />
-              </div>
+              </motion.div>
               <h3 className="mt-4 font-display font-semibold">{f.title}</h3>
               <p className="mt-1 text-sm text-muted-foreground">{f.desc}</p>
-            </div>
+            </motion.div>
           ))}
         </motion.div>
       </main>

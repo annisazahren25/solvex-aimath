@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Logo } from "@/components/solvex/logo";
+import { AnimatedBackground } from "@/components/solvex/animated-background";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/login")({ component: Login });
@@ -63,23 +64,46 @@ export function AuthCard({ mode }: { mode: "login" | "register" }) {
   };
 
   return (
-    <div className="grid min-h-screen md:grid-cols-2">
+    <div className="relative grid min-h-screen md:grid-cols-2">
       <div className="relative hidden overflow-hidden bg-card md:block">
-        <div className="relative z-10 flex h-full flex-col justify-between p-12">
+        <AnimatedBackground variant="vivid" />
+        <motion.div
+          initial={{ opacity: 0, y: 14 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, ease: "easeOut" }}
+          className="relative z-10 flex h-full flex-col justify-between p-12"
+        >
           <Link to="/"><Logo /></Link>
           <div>
-            <h2 className="font-display text-4xl font-bold leading-tight">
-              The fastest way to <span className="text-primary">understand</span> math.
-            </h2>
-            <p className="mt-4 max-w-md text-muted-foreground">
+            <motion.h2
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.15, duration: 0.6 }}
+              className="font-display text-4xl font-bold leading-tight"
+            >
+              The fastest way to{" "}
+              <span className="bg-gradient-primary bg-clip-text text-transparent">
+                understand
+              </span>{" "}
+              math.
+            </motion.h2>
+            <motion.p
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.25, duration: 0.6 }}
+              className="mt-4 max-w-md text-muted-foreground"
+            >
               Step-by-step explanations powered by AI, with LaTeX-rendered solutions and image scanning.
-            </p>
+            </motion.p>
           </div>
           <p className="text-xs text-muted-foreground">© SolveX · 2026</p>
-        </div>
+        </motion.div>
       </div>
 
-      <div className="flex items-center justify-center px-6 py-12">
+      <div className="relative flex items-center justify-center px-6 py-12 md:bg-background">
+        <div className="md:hidden">
+          <AnimatedBackground variant="soft" symbols={false} />
+        </div>
         <motion.div
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
