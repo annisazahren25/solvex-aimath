@@ -103,13 +103,6 @@ export function ModeSelector({
       <Dialog open={!!lockedOpen} onOpenChange={(o) => !o && setLockedOpen(null)}>
         <DialogContent className="overflow-hidden border-primary/20 p-0 sm:max-w-md">
           <div className="relative bg-gradient-to-br from-primary/10 via-background to-primary-soft/10 p-6">
-            <button
-              onClick={() => setLockedOpen(null)}
-              className="absolute right-3 top-3 rounded-full p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
-              aria-label="Close"
-            >
-              <X className="h-4 w-4" />
-            </button>
             <motion.div
               initial={{ scale: 0.8, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
