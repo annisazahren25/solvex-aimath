@@ -30,18 +30,23 @@ export function AnimatedBackground({
   grid?: boolean;
   className?: string;
 }) {
-  // Pre-generate symbol positions so they stay stable across renders.
+  // Deterministic pseudo-random so SSR and client render the same positions
+  // (Math.random() would cause hydration mismatches).
   const floaters = useMemo(() => {
+    const rand = (seed: number) => {
+      const x = Math.sin(seed * 9301 + 49297) * 233280;
+      return x - Math.floor(x);
+    };
     return Array.from({ length: 14 }).map((_, i) => ({
       id: i,
       symbol: MATH_SYMBOLS[i % MATH_SYMBOLS.length],
-      left: Math.random() * 100,
-      top: Math.random() * 100,
-      size: 14 + Math.random() * 34,
-      delay: Math.random() * 6,
-      duration: 14 + Math.random() * 16,
-      drift: 20 + Math.random() * 40,
-      rotate: (Math.random() - 0.5) * 40,
+      left: rand(i + 1) * 100,
+      top: rand(i + 2) * 100,
+      size: 14 + rand(i + 3) * 34,
+      delay: rand(i + 4) * 6,
+      duration: 14 + rand(i + 5) * 16,
+      drift: 20 + rand(i + 6) * 40,
+      rotate: (rand(i + 7) - 0.5) * 40,
     }));
   }, []);
 
