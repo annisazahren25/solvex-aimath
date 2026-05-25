@@ -47,6 +47,17 @@ export function ChatWindow({
   const [uploadAd, setUploadAd] = useState(false);
   const [unlockAdFor, setUnlockAdFor] = useState<string | null>(null);
 
+  const [mode, setMode] = useState<ExplanationMode>(() => {
+    if (typeof window === "undefined") return "simple";
+    const saved = window.localStorage.getItem(MODE_KEY) as ExplanationMode | null;
+    return saved ?? "simple";
+  });
+  const modeRef = useRef<ExplanationMode>(mode);
+  useEffect(() => {
+    modeRef.current = mode;
+    if (typeof window !== "undefined") window.localStorage.setItem(MODE_KEY, mode);
+  }, [mode]);
+
   const transport = new DefaultChatTransport({
     api: "/api/chat",
     fetch: async (url, init) => {
@@ -56,7 +67,9 @@ export function ChatWindow({
       if (token) headers.set("Authorization", `Bearer ${token}`);
       return fetch(url, { ...init, headers });
     },
-    prepareSendMessagesRequest: ({ messages }) => ({ body: { messages, threadId } }),
+    prepareSendMessagesRequest: ({ messages }) => ({
+      body: { messages, threadId, mode: modeRef.current },
+    }),
   });
 
   const { messages, sendMessage, status, error } = useChat({
