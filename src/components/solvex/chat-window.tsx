@@ -19,6 +19,9 @@ import {
 } from "@/lib/subscription.functions";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { ModeSelector, ActiveModeBadge, type ExplanationMode } from "./mode-selector";
+
+const MODE_KEY = "solvex:explanation-mode";
 
 export function ChatWindow({
   threadId,
