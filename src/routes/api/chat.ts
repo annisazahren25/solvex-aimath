@@ -92,8 +92,10 @@ export const Route = createFileRoute("/api/chat")({
         }
         const userId = claimsData.claims.sub as string;
 
-        const body = (await request.json()) as { messages: UIMessage[]; threadId: string };
+        const body = (await request.json()) as { messages: UIMessage[]; threadId: string; mode?: string };
         const { messages, threadId } = body;
+        const mode = (body.mode ?? "simple") as
+          | "simple" | "detailed" | "teacher" | "fast" | "exam";
         if (!threadId || !Array.isArray(messages)) {
           return new Response("Bad request", { status: 400 });
         }
