@@ -201,6 +201,9 @@ export function ChatWindow({
             <p className="mt-2 text-muted-foreground">
               Type a problem, upload an image, or snap a photo of your equation.
             </p>
+            <div className="mt-5">
+              <ActiveModeBadge mode={mode} />
+            </div>
           </div>
         ) : (
           <div className="mx-auto max-w-3xl space-y-6 px-4 py-8">
