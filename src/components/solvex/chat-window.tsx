@@ -271,6 +271,12 @@ export function ChatWindow({
         )}
       </div>
       <div className="border-t border-border bg-background/60 backdrop-blur">
+        {!isEmpty && (
+          <div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-3 px-4 pt-3">
+            <ActiveModeBadge mode={mode} />
+          </div>
+        )}
+        <ModeSelector value={mode} onChange={setMode} isPro={isPro} />
         <Composer
           onSubmit={handleSubmit}
           disabled={busy}
