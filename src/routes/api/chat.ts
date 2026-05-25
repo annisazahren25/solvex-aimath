@@ -92,8 +92,10 @@ export const Route = createFileRoute("/api/chat")({
         }
         const userId = claimsData.claims.sub as string;
 
-        const body = (await request.json()) as { messages: UIMessage[]; threadId: string };
+        const body = (await request.json()) as { messages: UIMessage[]; threadId: string; mode?: string };
         const { messages, threadId } = body;
+        const mode = (body.mode ?? "simple") as
+          | "simple" | "detailed" | "teacher" | "fast" | "exam";
         if (!threadId || !Array.isArray(messages)) {
           return new Response("Bad request", { status: 400 });
         }
@@ -159,9 +161,25 @@ export const Route = createFileRoute("/api/chat")({
         const gateway = createLovableAiGatewayProvider(LOVABLE_API_KEY);
         const model = gateway("google/gemini-2.5-flash");
 
+        const PRO_MODES = new Set(["detailed", "teacher", "exam"]);
+        const effectiveMode = !isPro && PRO_MODES.has(mode) ? "simple" : mode;
+        const MODE_INSTRUCTIONS: Record<string, string> = {
+          simple:
+            "EXPLANATION MODE: SIMPLE. Keep explanations very short and beginner friendly. Use minimal steps (aim for 2–4), one short sentence per step, no extra theory. Go straight to the point.",
+          fast:
+            "EXPLANATION MODE: FAST ANSWER. Prioritize the final answer. Show it first using a brief **Answer:** line, then provide at most 1–2 ultra-compact steps for justification. Keep the whole response tight and minimal.",
+          detailed:
+            "EXPLANATION MODE: DETAILED. Provide a thorough step-by-step breakdown. Explain every calculation, name and briefly justify each formula or property used, and include intermediate algebraic manipulations. Be educational and complete.",
+          teacher:
+            "EXPLANATION MODE: TEACHER. Speak like a friendly, patient math teacher guiding a student. Use warm, encouraging language. For each step, briefly explain WHY we do it and WHY the chosen formula or property applies, not just what to compute. Introduce concepts naturally (e.g. \"First, let's identify what we know...\", \"Now we substitute the values into the formula because...\"). Keep the strict numbered step format, but allow one short teaching sentence per step.",
+          exam:
+            "EXPLANATION MODE: EXAM SHORTCUT. Focus on the fastest path to the answer for a test setting. Prefer shortcuts, tricks, mental-math techniques, and well-known exam patterns (e.g. Vieta's formulas, special triangles, symmetry, elimination). Mention the trick name when relevant. Keep steps minimal and efficient.",
+        };
+        const modeSystem = `${SYSTEM_PROMPT}\n\n${MODE_INSTRUCTIONS[effectiveMode] ?? MODE_INSTRUCTIONS.simple}`;
+
         const result = streamText({
           model,
-          system: SYSTEM_PROMPT,
+          system: modeSystem,
           messages: await convertToModelMessages(messages),
         });
 

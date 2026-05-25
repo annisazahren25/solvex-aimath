@@ -19,6 +19,9 @@ import {
 } from "@/lib/subscription.functions";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { ModeSelector, ActiveModeBadge, type ExplanationMode } from "./mode-selector";
+
+const MODE_KEY = "solvex:explanation-mode";
 
 export function ChatWindow({
   threadId,
@@ -44,6 +47,17 @@ export function ChatWindow({
   const [uploadAd, setUploadAd] = useState(false);
   const [unlockAdFor, setUnlockAdFor] = useState<string | null>(null);
 
+  const [mode, setMode] = useState<ExplanationMode>(() => {
+    if (typeof window === "undefined") return "simple";
+    const saved = window.localStorage.getItem(MODE_KEY) as ExplanationMode | null;
+    return saved ?? "simple";
+  });
+  const modeRef = useRef<ExplanationMode>(mode);
+  useEffect(() => {
+    modeRef.current = mode;
+    if (typeof window !== "undefined") window.localStorage.setItem(MODE_KEY, mode);
+  }, [mode]);
+
   const transport = new DefaultChatTransport({
     api: "/api/chat",
     fetch: async (url, init) => {
@@ -53,7 +67,9 @@ export function ChatWindow({
       if (token) headers.set("Authorization", `Bearer ${token}`);
       return fetch(url, { ...init, headers });
     },
-    prepareSendMessagesRequest: ({ messages }) => ({ body: { messages, threadId } }),
+    prepareSendMessagesRequest: ({ messages }) => ({
+      body: { messages, threadId, mode: modeRef.current },
+    }),
   });
 
   const { messages, sendMessage, status, error } = useChat({
@@ -185,6 +201,9 @@ export function ChatWindow({
             <p className="mt-2 text-muted-foreground">
               Type a problem, upload an image, or snap a photo of your equation.
             </p>
+            <div className="mt-5">
+              <ActiveModeBadge mode={mode} />
+            </div>
           </div>
         ) : (
           <div className="mx-auto max-w-3xl space-y-6 px-4 py-8">
@@ -252,6 +271,12 @@ export function ChatWindow({
         )}
       </div>
       <div className="border-t border-border bg-background/60 backdrop-blur">
+        {!isEmpty && (
+          <div className="mx-auto flex w-full max-w-3xl items-center justify-between gap-3 px-4 pt-3">
+            <ActiveModeBadge mode={mode} />
+          </div>
+        )}
+        <ModeSelector value={mode} onChange={setMode} isPro={isPro} />
         <Composer
           onSubmit={handleSubmit}
           disabled={busy}
